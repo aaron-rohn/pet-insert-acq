@@ -2,6 +2,7 @@ import socket
 
 import tkinter as tk
 
+from time import sleep
 from tkinter import messagebox
 from tkinter.ttk import Separator, Sizegrip
 from tkinter.scrolledtext import ScrolledText
@@ -18,8 +19,9 @@ class Command():
 
     SET_POWER       = 4
     GET_CURRENT     = 5
-    GPIO_RD_BACKEND = 6
-    BACKEND_STATUS  = 7
+    GPIO            = 6
+    NOP             = 7
+    UART            = 8
 
     CMD_EMPTY = 0xF0000000
 
@@ -57,17 +59,23 @@ class Command():
 
     @staticmethod
     def gpio_rd_backend(offset, mask):
-        return Command.build_cmd(0, Command.GPIO_RD_BACKEND, ((offset & 0xFF) << 8) | (mask & 0xFF))
+        return Command.build_cmd(0, Command.GPIO, ((offset & 0xFF) << 8) | (mask & 0xFF))
+
     @staticmethod
     def gpio_rd_rx_err():
         return Command.gpio_rd_backend(0, 0xF)
+
     @staticmethod
     def gpio_rd_tx_idle():
         return Command.gpio_rd_backend(4, 0xF)
 
     @staticmethod
     def backend_status(val = 0):
-        return Command.build_cmd(0, Command.BACKEND_STATUS, val)
+        return Command.build_cmd(0, Command.NOP, val)
+
+    @staticmethod
+    def uart():
+        return Command.build_cmd(0, Command.UART, 0)
 
 class Backend():
     data_port = 5555
@@ -100,12 +108,13 @@ class Backend():
 
     def __transfer_cmd(self, cmd):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(0.1)
+        s.settimeout(1)
 
         try:
             s.connect((self.ip, self.ctrl_port))
             s.send(cmd)
             d = s.recv(1024)
+
         except socket.timeout as e:
             print("({}) Error connecting to socket: {} ".format(self.ip, e))
             d = None
@@ -115,17 +124,15 @@ class Backend():
 
     def __exec_cmd(self, cmd, *args):
         cmd_int = cmd(*args)
-        #print(hex(cmd_int))
         cmd_bytes = Backend.__cmd_to_bytes(cmd_int)
         cmd_resp_bytes = self.__transfer_cmd(cmd_bytes)
         cmd_resp_int = Backend.__cmd_from_bytes(cmd_resp_bytes)
         return cmd_resp_int
 
     def set_status(self):
-        value = 10
-        cmd_resp = self.__exec_cmd(Command.backend_status, value)
+        cmd_resp = self.__exec_cmd(Command.backend_status, 10)
         value_out = Command.cmd_payload(cmd_resp)
-        self.status.config(bg = 'green' if value == value_out else 'red')
+        self.status.config(bg = 'green' if value_out == 10 else 'red')
 
     def get_rx_status(self):
         cmd_resp = self.__exec_cmd(Command.gpio_rd_rx_err)
@@ -135,26 +142,14 @@ class Backend():
         cmd_resp = self.__exec_cmd(Command.gpio_rd_tx_idle)
         return Command.cmd_payload(cmd_resp) & 0xF
 
-    def get_frontend_power(self):
-        cmd_resp = self.__exec_cmd(Command.set_power)
-        print(hex(cmd_resp))
+    def get_set_frontend_power(self, update = False):
+        pow_state = [m.get() for m in self.m_pow_var]
+        cmd_resp = self.__exec_cmd(Command.set_power, update, pow_state)
         return Command.cmd_payload(cmd_resp) & 0xF
 
-    def set_frontend_power(self):
-        pow_state = [m.get() for m in self.m_pow_var]
-        cmd_resp = self.__exec_cmd(Command.set_power, True, pow_state)
-        print(hex(cmd_resp))
-        cmd_resp = Command.cmd_payload(cmd_resp) & 0xF
-
-        """
-        mask = cmd_resp
-        for m in self.m_pow_var:
-            m.set(mask & 0x1)
-            mask = mask >> 1
-        """
-
-        return cmd_resp
-
+    def uart(self):
+        cmd_resp = self.__exec_cmd(Command.uart)
+        return Command.cmd_payload(cmd_resp)
 
 class App(tk.Frame):
     def __init__(self):
@@ -162,11 +157,7 @@ class App(tk.Frame):
         super().__init__(self.root)
         self.draw()
 
-    def quit(self, ev = None):
-        self.root.destroy()
-
     def draw(self):
-        # Backend elements
         self.backend_frame = tk.Frame(self.root)
         self.backend_frame.pack()
 
@@ -184,32 +175,31 @@ class App(tk.Frame):
         self.backend_refresh = tk.Button(self.backend_frame, text = "Refresh", command = refresh_callback)
         self.backend_refresh.pack(fill = "both", expand = True, padx = 10, pady = 10)
 
-        # Show rx_locked for each frontend module
-        rx_status_callback = lambda: self.print([to_mask(b.get_rx_status()) for b in self.backend])
+        def callback_gen(func, *args):
+            return lambda: self.print([to_mask(getattr(b, func)(*args)) for b in self.backend])
+
+        rx_status_callback = callback_gen('get_rx_status')
+        tx_status_callback = callback_gen('get_tx_status')
+        power_rd_callback  = callback_gen('get_set_frontend_power', False)
+        power_wr_callback  = callback_gen('get_set_frontend_power', True)
+        uart_callback      = lambda: self.print(self.backend[0].uart().to_bytes(5,'big'))
+
         self.backend_rx_status = tk.Button(self.backend_frame, text = "Update RX status", command = rx_status_callback)
-        self.backend_rx_status.pack(fill = "both", expand = True, padx = 10, pady = 10)
-
-        # Show tx_idle for each backend output
-        tx_status_callback = lambda: self.print([to_mask(b.get_tx_status()) for b in self.backend])
         self.backend_tx_status = tk.Button(self.backend_frame, text = "Update TX status", command = tx_status_callback)
-        self.backend_tx_status.pack(fill = "both", expand = True, padx = 10, pady = 10)
-
-        # Show power state for each frontend module
-        power_rd_callback = lambda: self.print([to_mask(b.get_frontend_power()) for b in self.backend])
         self.power_rd_callback = tk.Button(self.backend_frame, text = "Read power state", command = power_rd_callback)
-        self.power_rd_callback.pack(fill = "both", expand = True, padx = 10, pady = 10)
-
-        # Set power state for each frontend module
-        power_wr_callback = lambda: self.print([to_mask(b.set_frontend_power()) for b in self.backend])
         self.power_wr_callback = tk.Button(self.backend_frame, text = "Set power state", command = power_wr_callback)
+        self.uart_callback     = tk.Button(self.backend_frame, text = "Uart heartbeat", command = uart_callback)
+
+        self.backend_rx_status.pack(fill = "both", expand = True, padx = 10, pady = 10)
+        self.backend_tx_status.pack(fill = "both", expand = True, padx = 10, pady = 10)
+        self.power_rd_callback.pack(fill = "both", expand = True, padx = 10, pady = 10)
         self.power_wr_callback.pack(fill = "both", expand = True, padx = 10, pady = 10)
+        self.uart_callback.pack(fill = "both", expand = True, padx = 10, pady = 10)
 
         Separator(self.root, orient = "horizontal").pack(fill = tk.X, expand = True, padx = 10, pady = 10)
 
         self.status_text = ScrolledText(master = self.root, width = 60, height = 10, takefocus = False)
         self.status_text.pack(fill = "both", expand = True, padx = 10, pady = 10)
-
-        self.root.bind('<Escape>', lambda e: self.quit() if tk.messagebox.askyesno("", "Quit?") else None)
 
     def print(self, txt):
         self.status_text.insert(tk.END, str(txt) + "\n")
