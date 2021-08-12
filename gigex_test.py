@@ -1,25 +1,24 @@
 import socket
+import time
 from gigex import Gigex
+from command import Command
 
 g = Gigex('192.168.1.101')
 
 with g:
+    g.reboot()
 
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.settimeout(1)
-    s.connect(('192.168.1.101', 5556))
+with g:
+    ret = g.spi_query(Command.set_power())
+    print(hex(ret))
 
-    try:
-        for _ in range(1024):
-            s.recv(4096)
-    except:
-        pass
+    time.sleep(0.5)
 
-    ret = g.spi(0x4)
-    print(ret)
+    ret = g.spi_query(Command.set_power(True))
+    print(hex(ret))
 
-    buf = s.recv(4096)
-    print(buf)
+    time.sleep(0.5)
 
-    s.close()
+    ret = g.spi_query(Command.set_power())
+    print(hex(ret))
 

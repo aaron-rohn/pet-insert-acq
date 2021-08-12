@@ -1,3 +1,4 @@
+import time
 import socket
 
 class Gigex():
@@ -5,11 +6,15 @@ class Gigex():
 
     def __init__(self, ip):
         self.ip = ip
-        self.sys = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sys.settimeout(1)
+        self.sys = None
 
     def __enter__(self):
+        self.sys = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        print("connecting...")
+        self.sys.settimeout(30)
         self.sys.connect((self.ip, Gigex.sys_port))
+        print("connected.")
+        self.sys.settimeout(1)
         return self
 
     def __exit__(self, *context):
@@ -22,33 +27,29 @@ class Gigex():
         data = [0] if nwords_i == 0 else data
         data = b''.join([d.to_bytes(4,'big') for d in data])
 
-        cmd = ((0xEE).to_bytes(1,'big') +
-               (0x21).to_bytes(1,'big') +
-               (0x20).to_bytes(1,'big') +
-               (0xFF).to_bytes(1,'big') +
+        cmd = ((0xEE2120FF).to_bytes(4,'big') +
                nwords_b + nwords_b + data)
-               #((0).to_bytes(2,'big')) + ((0).to_bytes(2,'big')) + data)
-
-        print(hex(int.from_bytes(cmd, 'big')))
 
         self.sys.send(cmd)
-        resp = self.sys.recv(1024)
+        code,stat,_,_, *resp = self.sys.recv(1024)
 
-        code = resp[0]
-        stat = resp[1]
-
-        print("{} {}".format(hex(code), hex(stat)))
-
-        resp = resp[4:]
         resp = [resp[i:i+4] for i in range(0, len(resp), 4)]
-        resp = [hex(int.from_bytes(r,'big')) for r in resp]
+        resp = [int.from_bytes(r,'big') for r in resp]
 
         return ((code == 0xEE) & (stat == 0), resp)
 
+    def spi_query(self, cmd):
+        print(hex(cmd))
+        self.spi(cmd)
+        #time.sleep(0.1)
+        status, value = self.spi(0)
+        print(hex(value[0]))
+        return value[0] if status else None
+
     def reboot(self):
         cmd = (0xF1000000).to_bytes(4,'big')
-        self.sys.sendall(cmd)
-        resp = self.recv(1024)
+        self.sys.send(cmd)
+        resp = self.sys.recv(1024)
         # returns true on success
         return (resp[0] == 0xF1) & (resp[1] == 0x00)
 
