@@ -2,7 +2,6 @@ import tkinter as tk
 from tkinter.ttk import Separator
 from tkinter.scrolledtext import ScrolledText
 
-from command import Command
 from backend import Backend
 
 def to_mask(num):
@@ -39,16 +38,19 @@ class App(tk.Frame):
         tx_status_callback = callback_gen('get_tx_status')
         power_rd_callback  = callback_gen('get_set_frontend_power', False)
         power_wr_callback  = callback_gen('get_set_frontend_power', True)
+        current_callback   = lambda: self.print([b.get_current() for b in self.backend])
 
         self.backend_rx_status = tk.Button(self.backend_frame, text = "Update RX status", command = rx_status_callback)
         self.backend_tx_status = tk.Button(self.backend_frame, text = "Update TX status", command = tx_status_callback)
         self.power_rd_callback = tk.Button(self.backend_frame, text = "Read power state", command = power_rd_callback)
         self.power_wr_callback = tk.Button(self.backend_frame, text = "Set power state", command = power_wr_callback)
+        self.current_callback  = tk.Button(self.backend_frame, text = "Read current", command = current_callback)
 
         self.backend_rx_status.pack(fill = "both", expand = True, padx = 10, pady = 10)
         self.backend_tx_status.pack(fill = "both", expand = True, padx = 10, pady = 10)
         self.power_rd_callback.pack(fill = "both", expand = True, padx = 10, pady = 10)
         self.power_wr_callback.pack(fill = "both", expand = True, padx = 10, pady = 10)
+        self.current_callback.pack(fill = "both", expand = True, padx = 10, pady = 10)
 
         Separator(self.root, orient = "horizontal").pack(fill = tk.X, expand = True, padx = 10, pady = 10)
 
