@@ -1,28 +1,46 @@
 import time
 import socket
+import threading
+
 import tkinter as tk
+from tkinter.scrolledtext import ScrolledText
 
 import command as cmd
 from gigex import Gigex
 
 class Backend():
-    def __init__(self, parent_frame, label, ip):
+    data_port = 5555
+
+    @staticmethod
+    def acq(ip, print_func, finished):
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(0.1)
+        s.connect((ip,Backend.data_port))
+
+        while not finished.is_set():
+            try:
+                d = sock.recv(4096)
+                print_func(d)
+            except socket.timeout as e:
+                pass
+
+    def __enter__(self):
+        args = (self.ip, self.print, self.finished)
+        self.acq_thread = threading.Thread(target = Backend.acq, args = args)
+        self.finished.clear()
+        self.acq_thread.start()
+        return self
+
+    def __exit__(self, *context):
+        self.finished.set()
+        self.acq_thread.join()
+
+    def __init__(self, label, ip):
         self.ip = ip
+        self.label_text = label
         self.gx = Gigex(ip)
-
-        self.frame  = tk.Frame(parent_frame)
-        self.label  = tk.Label(self.frame, text = label + ":")
-        self.text   = tk.Label(self.frame, text = ip)
-        self.status = tk.Canvas(self.frame, bg = 'red', height = 10, width = 10)
-
-        self.m_pow_var = [tk.IntVar() for _ in range(4)]
-        self.m_pow  = [tk.Checkbutton(self.frame, text = i, variable = self.m_pow_var[i]) for i in range(4)]
-
-        self.frame.pack(fill = tk.X, expand = True, padx = 10, pady = 10)
-        self.label.pack(side = tk.LEFT)
-        self.text.pack(side = tk.LEFT)
-        self.status.pack(side = tk.LEFT, padx = 10)
-        [m.pack(side = tk.LEFT) for m in self.m_pow]
+        self.finished = threading.Event()
+        self.acq_thread = None
 
     def __exec_cmd(self, cmd_int):
         with self.gx:
@@ -31,7 +49,7 @@ class Backend():
     def set_status(self):
         resp = self.__exec_cmd(cmd.backend_status(10))
         value_out = cmd.payload(resp)
-        self.status.config(bg = 'green' if value_out == 10 else 'red')
+        return (value_out == 10)
 
     def get_rx_status(self):
         resp = self.__exec_cmd(cmd.gpio_rd_rx_err())
@@ -41,8 +59,7 @@ class Backend():
         resp = self.__exec_cmd(cmd.gpio_rd_tx_idle())
         return cmd.payload(resp) & 0xF
 
-    def get_set_frontend_power(self, update = False):
-        nxt_state = [m.get() for m in self.m_pow_var]
+    def get_set_frontend_power(self, update = False, nxt_state = [False]*4):
         resp = self.__exec_cmd(cmd.set_power(update, nxt_state))
         return cmd.payload(resp)
 

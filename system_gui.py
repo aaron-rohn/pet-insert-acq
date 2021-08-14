@@ -2,49 +2,76 @@ import tkinter as tk
 from tkinter.ttk import Separator
 from tkinter.scrolledtext import ScrolledText
 
+from system import System
 from backend import Backend
 
 def to_mask(num):
     return format(num, '#06b')
 
-class App(tk.Frame):
-    def __init__(self):
-        self.root = tk.Tk()
-        super().__init__(self.root)
-        self.draw()
+class BackendUI():
+    def __init__(self, backend_instance, parent_frame):
+        self.backend = backend_instance
+        self.m_pow_var = [tk.IntVar() for _ in range(4)]
 
-    def draw(self):
-        self.backend_frame = tk.Frame(self.root)
-        self.backend_frame.pack()
+        self.frame  = tk.Frame(parent_frame)
+        self.label  = tk.Label(self.frame, text = self.backend.label_text+ ":")
+        self.text   = tk.Label(self.frame, text = self.backend.ip)
+        self.status = tk.Canvas(self.frame, bg = 'red', height = 10, width = 10)
+        self.m_pow  = [tk.Checkbutton(self.frame, text = i, variable = self.m_pow_var[i]) for i in range(4)]
+        self.data = ScrolledText(master = self.frame, width = 30, height = 5, takefocus = False)
 
-        self.backend_label = tk.Label(self.backend_frame, text = "Backend")
-        self.backend_label.pack(fill = "both", expand = True, padx = 10)
+        self.frame.pack(fill = tk.X, expand = True, padx = 10, pady = 10)
+        self.label.pack(side = tk.LEFT)
+        self.text.pack(side = tk.LEFT)
+        self.status.pack(side = tk.LEFT, padx = 10)
+        [m.pack(side = tk.LEFT) for m in self.m_pow]
+        self.data.pack(side = tk.LEFT, padx = 10)
 
-        backend_ips = ['192.168.1.101']
-        backend_lab = ['Data']
-        
-        args = zip([self.backend_frame]*len(backend_ips), backend_lab, backend_ips)
-        self.backend = [Backend(*a) for a in args]
+    def __getattr__(self, attr):
+        return getattr(self.backend, attr)
 
-        # Refresh backend status
-        refresh_callback = lambda: [b.set_status() for b in self.backend]
-        self.backend_refresh = tk.Button(self.backend_frame, text = "Refresh", command = refresh_callback)
+class SystemUI():
+    def print(self, txt):
+        self.status_text.insert(tk.END, str(txt) + "\n")
+        self.status_text.yview(tk.END)
+
+    def __init__(self, root, system_instance):
+        self.root = root
+
+        self.sys = system_instance
+        self.backend = [BackendUI(b, root) for b in self.sys.backend]
+
+        def refresh_callback():
+            ret = [b.set_status() for b in self.backend]
+            [b.status.config(bg = 'green' if r else 'red') for b,r in zip(self.backend, ret)]
+
+        self.backend_refresh = tk.Button(self.root, text = "Refresh", command = refresh_callback)
         self.backend_refresh.pack(fill = "both", expand = True, padx = 10, pady = 10)
 
         def callback_gen(func, *args):
             return lambda: self.print([to_mask(getattr(b, func)(*args)) for b in self.backend])
 
+        def power_callback_gen(update):
+            def cb():
+                ret = []
+                for b in self.backend:
+                    nxt_state = [v.get() for v in b.m_pow_var]
+                    r = b.get_set_frontend_power(update, nxt_state)
+                    ret.append(to_mask(r))
+                self.print(ret)
+            return cb
+
         rx_status_callback = callback_gen('get_rx_status')
         tx_status_callback = callback_gen('get_tx_status')
-        power_rd_callback  = callback_gen('get_set_frontend_power', False)
-        power_wr_callback  = callback_gen('get_set_frontend_power', True)
+        power_rd_callback  = power_callback_gen(False)
+        power_wr_callback  = power_callback_gen(True)
         current_callback   = lambda: self.print([b.get_current() for b in self.backend])
 
-        self.backend_rx_status = tk.Button(self.backend_frame, text = "Update RX status", command = rx_status_callback)
-        self.backend_tx_status = tk.Button(self.backend_frame, text = "Update TX status", command = tx_status_callback)
-        self.power_rd_callback = tk.Button(self.backend_frame, text = "Read power state", command = power_rd_callback)
-        self.power_wr_callback = tk.Button(self.backend_frame, text = "Set power state", command = power_wr_callback)
-        self.current_callback  = tk.Button(self.backend_frame, text = "Read current", command = current_callback)
+        self.backend_rx_status = tk.Button(self.root, text = "Update RX status", command = rx_status_callback)
+        self.backend_tx_status = tk.Button(self.root, text = "Update TX status", command = tx_status_callback)
+        self.power_rd_callback = tk.Button(self.root, text = "Read power state", command = power_rd_callback)
+        self.power_wr_callback = tk.Button(self.root, text = "Set power state", command = power_wr_callback)
+        self.current_callback  = tk.Button(self.root, text = "Read current", command = current_callback)
 
         self.backend_rx_status.pack(fill = "both", expand = True, padx = 10, pady = 10)
         self.backend_tx_status.pack(fill = "both", expand = True, padx = 10, pady = 10)
@@ -54,12 +81,10 @@ class App(tk.Frame):
 
         Separator(self.root, orient = "horizontal").pack(fill = tk.X, expand = True, padx = 10, pady = 10)
 
-        self.status_text = ScrolledText(master = self.root, width = 60, height = 10, takefocus = False)
+        self.status_text = ScrolledText(master = self.root, width = 60, height = 20, takefocus = False)
         self.status_text.pack(fill = "both", expand = True, padx = 10, pady = 10)
 
-    def print(self, txt):
-        self.status_text.insert(tk.END, str(txt) + "\n")
-        self.status_text.yview(tk.END)
-
-app = App()
-app.mainloop()
+with System() as sys:
+    root = tk.Tk()
+    app = SystemUI(root, sys)
+    root.mainloop()

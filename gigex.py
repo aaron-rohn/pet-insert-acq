@@ -10,11 +10,8 @@ class Gigex():
 
     def __enter__(self):
         self.sys = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        print("connecting...")
-        self.sys.settimeout(30)
-        self.sys.connect((self.ip, Gigex.sys_port))
-        print("connected.")
         self.sys.settimeout(1)
+        self.sys.connect((self.ip, Gigex.sys_port))
         return self
 
     def __exit__(self, *context):
@@ -41,7 +38,6 @@ class Gigex():
     def spi_query(self, cmd):
         print(hex(cmd))
         self.spi(cmd)
-        #time.sleep(0.1)
         status, value = self.spi(0)
         print(hex(value[0]))
         return value[0] if status else None
