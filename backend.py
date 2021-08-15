@@ -4,6 +4,7 @@ import threading
 
 import command as cmd
 from gigex import Gigex
+from frontend import Frontend
 
 class Backend():
     data_port = 5555
@@ -38,11 +39,12 @@ class Backend():
 
     def __init__(self, label, ip):
         self.ip = ip
-        self.label_text = label
+        self.label = label
         self.gx = Gigex(ip)
         self.finished = threading.Event()
         self.acq_thread = None
         self.data_output = lambda d: print("{}: {}".format(self.ip, d))
+        self.frontend = [Frontend(self) for _ in range(4)]
 
     def __exec_cmd(self, cmd_int):
         with self.gx:

@@ -2,7 +2,6 @@ import tkinter as tk
 from tkinter.ttk import Separator
 
 from system import System
-from backend import Backend
 from backend_ui import BackendUI
 
 class SystemUI():

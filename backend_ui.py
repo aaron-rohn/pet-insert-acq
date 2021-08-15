@@ -1,25 +1,38 @@
 import tkinter as tk
-from backend import Backend
+from frontend_ui import FrontendUI
 
 class BackendUI():
     def __init__(self, backend_instance, parent_frame):
         self.backend = backend_instance
         self.backend.__setattr__("data_output", self.print)
-        self.m_pow_var = [tk.IntVar() for _ in range(4)]
 
-        self.frame  = tk.Frame(parent_frame)
-        self.label  = tk.Label(self.frame, text = self.backend.label_text+ ":")
-        self.text   = tk.Label(self.frame, text = self.backend.ip)
-        self.status = tk.Canvas(self.frame, bg = 'red', height = 10, width = 10)
-        self.m_pow  = [tk.Checkbutton(self.frame, text = i, variable = self.m_pow_var[i]) for i in range(4)]
-        self.data = tk.Text(master = self.frame, height = 5, takefocus = False)
-
+        self.frame  = tk.Frame(parent_frame, relief = tk.GROOVE, borderwidth = 1)
+        self.common = tk.Frame(self.frame)
         self.frame.pack(fill = tk.X, expand = True, padx = 10, pady = 10)
-        self.label.pack(side = tk.LEFT)
-        self.text.pack(side = tk.LEFT)
+        self.common.pack(fill = tk.X, expand = True, padx = 10, pady = 10)
+
+        self.m_pow_var = []
+        self.m_pow = []
+        self.m_frame = []
+        self.frontend = []
+
+        for i in range(4):
+            self.m_pow_var.append(tk.IntVar())
+            self.m_frame.append(tk.Frame(self.frame))
+            self.m_pow.append(tk.Checkbutton(self.m_frame[-1], text = i, variable = self.m_pow_var[-1]))
+            self.m_frame[-1].pack(fill = tk.X, expand = True)
+            self.m_pow[-1].pack(side = tk.LEFT)
+
+            fe = self.backend.frontend[i]
+            self.frontend.append(FrontendUI(fe, self.m_frame[-1]))
+
+        self.label  = tk.Label(self.common, text = "{}: {}".format(self.backend.label, self.backend.ip))
+        self.status = tk.Canvas(self.common, bg = 'red', height = 10, width = 10)
+        self.data = tk.Text(master = self.common, height = 5, takefocus = False)
+
+        self.label.pack(side = tk.LEFT, padx = 10)
         self.status.pack(side = tk.LEFT, padx = 10)
-        [m.pack(side = tk.LEFT) for m in self.m_pow]
-        self.data.pack(side = tk.LEFT, padx = 10, expand = True, fill = tk.X)
+        self.data.pack(side = tk.LEFT, padx = 10, pady = 10, expand = True, fill = tk.X)
 
     def print(self, txt):
         self.data.insert(tk.END, str(txt) + "\n")
