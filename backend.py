@@ -44,30 +44,33 @@ class Backend():
         self.finished = threading.Event()
         self.acq_thread = None
         self.data_output = lambda d: print("{}: {}".format(self.ip, d))
-        self.frontend = [Frontend(self) for _ in range(4)]
+        self.frontend = [Frontend(self, i) for i in range(4)]
 
-    def __exec_cmd(self, cmd_int):
+    def __getattr__(self, attr):
+        return lambda: [getattr(f, attr)() for f in self.frontend]
+
+    def exec(self, cmd_int):
         with self.gx:
             return self.gx.spi_query(cmd_int)
 
     def get_status(self):
-        resp = self.__exec_cmd(cmd.backend_status(10))
+        resp = self.exec(cmd.backend_status(10))
         value_out = cmd.payload(resp)
         return (value_out == 10)
 
     def get_rx_status(self):
-        resp = self.__exec_cmd(cmd.gpio_rd_rx_err())
+        resp = self.exec(cmd.gpio_rd_rx_err())
         return Backend.mask_to_bool(cmd.payload(resp) & 0xF)
 
     def get_tx_status(self):
-        resp = self.__exec_cmd(cmd.gpio_rd_tx_idle())
+        resp = self.exec(cmd.gpio_rd_tx_idle())
         return Backend.mask_to_bool(cmd.payload(resp) & 0xF)
 
     def get_set_power(self, update = False, state = [False]*4):
-        resp = self.__exec_cmd(cmd.set_power(update, state))
+        resp = self.exec(cmd.set_power(update, state))
         return Backend.mask_to_bool(cmd.payload(resp))
 
     def get_current(self):
-        resp = [self.__exec_cmd(cmd.get_current(m)) for m in range(4)]
+        resp = [self.exec(cmd.get_current(m)) for m in range(4)]
         return [cmd.payload(m) for m in resp]
 

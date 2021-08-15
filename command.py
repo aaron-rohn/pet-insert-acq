@@ -42,3 +42,15 @@ def gpio_rd_tx_idle():
 
 def backend_status(val = 0):
     return build(0, NOP, val)
+
+def dac_write(module, channel, value):
+    channel &= 0xF
+    value &= 0xFFF
+    return build(module, DAC_WRITE, (0x3 << 16) | (channel << 12) | value)
+
+def adc_read(module, channel):
+    channel &= 0xF
+    return build(module, ADC_READ, (channel << 16))
+
+def module_id(m):
+    return build(m, MODULE_ID, 0)
