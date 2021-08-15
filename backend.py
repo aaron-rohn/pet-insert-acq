@@ -2,9 +2,6 @@ import time
 import socket
 import threading
 
-import tkinter as tk
-from tkinter.scrolledtext import ScrolledText
-
 import command as cmd
 from gigex import Gigex
 
@@ -12,20 +9,20 @@ class Backend():
     data_port = 5555
 
     @staticmethod
-    def acq(ip, print_func, finished):
+    def acq(ip, output, finished):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(0.1)
         s.connect((ip,Backend.data_port))
 
         while not finished.is_set():
             try:
-                d = sock.recv(4096)
-                print_func(d)
+                d = s.recv(4096)
+                if output is not None: output(d)
             except socket.timeout as e:
                 pass
 
     def __enter__(self):
-        args = (self.ip, self.print, self.finished)
+        args = (self.ip, self.data_output, self.finished)
         self.acq_thread = threading.Thread(target = Backend.acq, args = args)
         self.finished.clear()
         self.acq_thread.start()
@@ -41,6 +38,7 @@ class Backend():
         self.gx = Gigex(ip)
         self.finished = threading.Event()
         self.acq_thread = None
+        self.data_output = None
 
     def __exec_cmd(self, cmd_int):
         with self.gx:
