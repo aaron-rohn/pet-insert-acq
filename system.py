@@ -15,3 +15,10 @@ class System():
 
     def __exit__(self, *context):
         self._stack.__exit__(self, *context)
+
+    def __getattr__(self, attr):
+        return lambda: [getattr(b, attr)() for b in self.backend]
+
+    def get_set_power(self, update = False, states = [[False]*4]*4):
+        vals = zip(self.backend, states)
+        return [b.get_set_power(update, s) for b,s in vals]

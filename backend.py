@@ -9,6 +9,10 @@ class Backend():
     data_port = 5555
 
     @staticmethod
+    def mask_to_bool(val, n = 4):
+        return [bool(val & (1 << i)) for i in range(n)]
+
+    @staticmethod
     def acq(ip, output, finished):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(0.1)
@@ -38,28 +42,28 @@ class Backend():
         self.gx = Gigex(ip)
         self.finished = threading.Event()
         self.acq_thread = None
-        self.data_output = None
+        self.data_output = lambda d: print("{}: {}".format(self.ip, d))
 
     def __exec_cmd(self, cmd_int):
         with self.gx:
             return self.gx.spi_query(cmd_int)
 
-    def set_status(self):
+    def get_status(self):
         resp = self.__exec_cmd(cmd.backend_status(10))
         value_out = cmd.payload(resp)
         return (value_out == 10)
 
     def get_rx_status(self):
         resp = self.__exec_cmd(cmd.gpio_rd_rx_err())
-        return cmd.payload(resp) & 0xF
+        return Backend.mask_to_bool(cmd.payload(resp) & 0xF)
 
     def get_tx_status(self):
         resp = self.__exec_cmd(cmd.gpio_rd_tx_idle())
-        return cmd.payload(resp) & 0xF
+        return Backend.mask_to_bool(cmd.payload(resp) & 0xF)
 
-    def get_set_frontend_power(self, update = False, nxt_state = [False]*4):
-        resp = self.__exec_cmd(cmd.set_power(update, nxt_state))
-        return cmd.payload(resp)
+    def get_set_power(self, update = False, state = [False]*4):
+        resp = self.__exec_cmd(cmd.set_power(update, state))
+        return Backend.mask_to_bool(cmd.payload(resp))
 
     def get_current(self):
         resp = [self.__exec_cmd(cmd.get_current(m)) for m in range(4)]
