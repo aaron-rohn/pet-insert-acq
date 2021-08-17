@@ -57,6 +57,12 @@ class Frontend():
         self.backend = backend_instance
         self.index = index
 
+    def set_bias(self, value = 0.0):
+        return [self.set_dac(True, i, value) for i in range(4)]
+
+    def set_thresh(self, value = 0.05):
+        return [self.set_dac(False, i, value) for i in range(4)]
+
     def set_dac(self, is_bias, block, value):
         ch, val = (bias_ch[block],bias_to_hex(value)) if is_bias else (thresh_ch[block],thresh_to_hex(value))
         cmd = command.dac_write(self.index, ch, val)

@@ -1,35 +1,45 @@
-import time
 import socket
 import threading
-import queue
-
 import command as cmd
 from gigex import Gigex
 from frontend import Frontend
 
+def mask_to_bool(val, n = 4):
+    return [bool(val & (1 << i)) for i in range(n)]
+
+data_port = 5555
+
+class BackendWriteFunc():
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.func = lambda data: None
+
+    def __call__(self, data):
+        with self.lock:
+            self.func(data)
+
+    def set(self, func):
+        with self.lock:
+            self.__setattr__('func', func)
+
 class Backend():
-    data_port = 5555
 
-    @staticmethod
-    def mask_to_bool(val, n = 4):
-        return [bool(val & (1 << i)) for i in range(n)]
-
-    @staticmethod
-    def acq(ip, output, finished):
+    def acq(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(0.1)
-        s.connect((ip,Backend.data_port))
+        s.connect((self.ip,data_port))
 
-        while not finished.is_set():
+        while not self.finished.is_set():
             try:
                 d = s.recv(4096)
-                output(d)
+                self.wr_func(d)
             except socket.timeout as e:
                 pass
 
+        s.close()
+
     def __enter__(self):
-        args = (self.ip, self.data_output, self.finished)
-        self.acq_thread = threading.Thread(target = Backend.acq, args = args)
+        self.acq_thread = threading.Thread(target = Backend.acq, args = [self])
         self.finished.clear()
         self.acq_thread.start()
         return self
@@ -41,18 +51,13 @@ class Backend():
     def __init__(self, ip):
         self.ip = ip
         self.gx = Gigex(self.ip)
-
-        with self.gx:
-            pass
-            #self.gx.reboot()
-
         self.finished = threading.Event()
+        self.wr_func = BackendWriteFunc()
         self.acq_thread = None
-        self.data_output = lambda data: None
         self.frontend = [Frontend(self, i) for i in range(4)]
 
     def __getattr__(self, attr):
-        return lambda: [getattr(f, attr)() for f in self.frontend]
+        return lambda *args, **kwds: [getattr(f, attr)(*args, **kwds) for f in self.frontend]
 
     def exec(self, cmd_int):
         with self.gx:
@@ -65,15 +70,15 @@ class Backend():
 
     def get_rx_status(self):
         resp = self.exec(cmd.gpio_rd_rx_err())
-        return Backend.mask_to_bool(cmd.payload(resp) & 0xF)
+        return mask_to_bool(cmd.payload(resp) & 0xF)
 
     def get_tx_status(self):
         resp = self.exec(cmd.gpio_rd_tx_idle())
-        return Backend.mask_to_bool(cmd.payload(resp) & 0xF)
+        return mask_to_bool(cmd.payload(resp) & 0xF)
 
     def get_set_power(self, update = False, state = [False]*4):
         resp = self.exec(cmd.set_power(update, state))
-        return Backend.mask_to_bool(cmd.payload(resp))
+        return mask_to_bool(cmd.payload(resp))
 
     def get_current(self):
         resp = [self.exec(cmd.get_current(m)) for m in range(4)]

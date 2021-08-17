@@ -1,10 +1,11 @@
+import time
 import tkinter as tk
 from tkinter.ttk import Separator
-from tkinter import filedialog
 
 from system import System
 from sync_ui import SyncUI
 from backend_ui import BackendUI
+from toggle_button import ToggleButton
 
 class SystemUI():
     def get_status(self):
@@ -26,7 +27,9 @@ class SystemUI():
         states = []
         for b in self.backend:
             states.append([v.get() for v in b.m_pow_var])
-        print(self.sys.get_set_power(update, states))
+        states = self.sys.get_set_power(update, states)
+        print(states)
+        return states
 
     def enumerate(self):
         sys_idx = self.sys.get_physical_idx()
@@ -34,9 +37,22 @@ class SystemUI():
             for indicator, phys_idx in zip(be.m_pow, be_idx):
                 indicator.config(text = phys_idx)
 
-    def update_output_dir(self):
-        dirname = filedialog.askdirectory()
-        self.file_indicator.config(text = dirname)
+    def get_current(self):
+        print(self.sys.get_current())
+
+    def power_toggle_cb(self, turn_on = False):
+        self.sys.get_set_power(True, [[turn_on]*4]*4)
+        pwr_states = self.get_set_power()
+        for b,s_all in zip(self.backend, pwr_states):
+            [v.set(s) for v,s in zip(b.m_pow_var, s_all)]
+
+        # Wait for frontend board to power on??
+        if turn_on: time.sleep(1)
+        self.get_status()
+
+    def bias_toggle_cb(self, turn_on = False):
+        bias_val = 29.5 if turn_on else 0.0
+        self.sys.set_bias(bias_val)
 
     def __init__(self, system_instance):
         self.root = tk.Tk()
@@ -45,29 +61,26 @@ class SystemUI():
         self.sync = SyncUI(self.sys.sync, self.root)
         self.backend = [BackendUI(b, self.root) for b in self.sys.backend]
 
-        self.file_output = tk.Frame(self.root)
-        self.file_select = tk.Button(self.file_output, text = "Directory", command = self.update_output_dir)
-        self.file_indicator = tk.Label(self.file_output, bg = 'white', text = '', anchor = 'w', relief = tk.SUNKEN, borderwidth = 1, height = 2) 
-        self.file_output.pack(fill = tk.X, expand = True)
-        self.file_select.pack(side = tk.LEFT, padx = 10, pady = 10)
-        self.file_indicator.pack(side = tk.LEFT, fill = tk.X, expand = True, padx = 10, pady = 10)
-
         self.refresh = tk.Button(self.root, text = "Refresh", command = self.get_status)
         self.enum = tk.Button(self.root, text = "Enumerate", command = self.enumerate)
-        self.power_rd_callback = tk.Button(self.root, text = "Read power state", command = self.get_set_power)
-        self.power_wr_callback = tk.Button(self.root, text = "Set power state", command = lambda: self.get_set_power(True))
-        self.current_callback  = tk.Button(self.root, text = "Read current", command = self.sys.get_current)
+        self.power_toggle = ToggleButton(self.root, "Power ON", "Power OFF", self.power_toggle_cb)
+        self.bias_toggle = ToggleButton(self.root, "Bias ON", "Bias OFF", self.bias_toggle_cb)
+        self.power_rd = tk.Button(self.root, text = "Read power state", command = self.get_set_power)
+        self.power_wr = tk.Button(self.root, text = "Set power state", command = lambda: self.get_set_power(True))
+        self.current = tk.Button(self.root, text = "Read current", command = self.get_current)
 
-        self.refresh.pack(fill = "both", expand = True, padx = 10, pady = 10)
-        self.enum.pack(fill = "both", expand = True, padx = 10, pady = 10)
-        self.power_rd_callback.pack(fill = "both", expand = True, padx = 10, pady = 10)
-        self.power_wr_callback.pack(fill = "both", expand = True, padx = 10, pady = 10)
-        self.current_callback.pack(fill = "both", expand = True, padx = 10, pady = 10)
+        pack_args = {'fill': tk.X, 'expand': True, 'padx': 10, 'pady': 10}
+        self.refresh.pack(**pack_args)
+        self.enum.pack(**pack_args)
+        self.power_toggle.pack(**pack_args)
+        self.bias_toggle.pack(**pack_args)
 
-        Separator(self.root, orient = "horizontal").pack(fill = tk.X, expand = True, padx = 10, pady = 10)
+        Separator(self.root).pack(fill = tk.X, padx = 10, pady = 20)
+        
+        self.power_rd.pack(**pack_args)
+        self.power_wr.pack(**pack_args)
+        self.current.pack(**pack_args)
 
-        self.status_text = tk.Text(master = self.root, width = 60, height = 20, takefocus = False)
-        self.status_text.pack(fill = "both", expand = True, padx = 10, pady = 10)
         self.root.bind('<Escape>', lambda *args: self.root.quit())
 
 if __name__ == "__main__":

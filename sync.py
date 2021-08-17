@@ -5,9 +5,6 @@ class Sync():
     def __init__(self, ip):
         self.ip = ip
         self.gx = Gigex(self.ip)
-        with self.gx:
-            pass
-            #self.gx.reboot()
 
     def rst(self):
         with self.gx:
