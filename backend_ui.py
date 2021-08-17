@@ -2,11 +2,14 @@ import tkinter as tk
 from frontend_ui import FrontendUI
 
 class BackendUI():
+    def recv_data(self):
+        pass
+
     def __init__(self, backend_instance, parent_frame):
         self.backend = backend_instance
         self.backend.__setattr__("data_output", self.print)
 
-        self.frame  = tk.Frame(parent_frame, relief = tk.GROOVE, borderwidth = 1)
+        self.frame = tk.Frame(parent_frame, relief = tk.GROOVE, borderwidth = 1)
         self.common = tk.Frame(self.frame)
         self.frame.pack(fill = tk.X, expand = True, padx = 10, pady = 10)
         self.common.pack(fill = tk.X, expand = True, padx = 10, pady = 10)
@@ -26,7 +29,7 @@ class BackendUI():
             fe = self.backend.frontend[i]
             self.frontend.append(FrontendUI(fe, self.m_frame[-1]))
 
-        self.label  = tk.Label(self.common, text = "{}: {}".format(self.backend.label, self.backend.ip))
+        self.label  = tk.Label(self.common, text = "Data: {}".format(self.backend.ip))
         self.status = tk.Canvas(self.common, bg = 'red', height = 10, width = 10)
         self.data = tk.Text(master = self.common, height = 5, takefocus = False)
 

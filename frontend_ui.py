@@ -6,22 +6,20 @@ class FrontendUI():
         self.frame = parent_frame
 
         self.status = tk.Canvas(self.frame, bg = 'red', height = 10, width = 10)
-        self.bias = tk.Button(self.frame, text = "Bias", command = self.set_bias)
-        self.thresh = tk.Button(self.frame, text = "Threshold", command = self.set_thresh)
+        self.bias_on = tk.Button(self.frame, text = "Bias On", command = lambda: self.set_bias(29.5))
+        self.bias_off = tk.Button(self.frame, text = "Bias Off", command = self.set_bias)
         self.temp = tk.Button(self.frame, text = "Temperature", command = self.get_temp)
-        self.id = tk.Button(self.frame, text = "ID", command = self.get_id)
 
         self.status.pack(side = tk.LEFT, padx = 10)
-        self.bias.pack(side = tk.LEFT)
-        self.thresh.pack(side = tk.LEFT)
+        self.bias_on.pack(side = tk.LEFT)
+        self.bias_off.pack(side = tk.LEFT)
         self.temp.pack(side = tk.LEFT)
-        self.id.pack(side = tk.LEFT)
 
-    def set_bias(self):
-        self.frontend.set_dac(True, 0, 0)
+    def set_bias(self, bias = 0.0):
+        [self.frontend.set_dac(True, i, bias) for i in range(4)]
 
-    def set_thresh(self):
-        self.frontend.set_dac(False, 0, 0)
+    def set_thresh(self, thresh = 0.50):
+        [self.frontend.set_dac(False, i, thresh) for i in range(4)]
 
     def get_temp(self):
         temps = self.frontend.get_temp()

@@ -1,6 +1,7 @@
 import time
 import socket
 import threading
+import queue
 
 import command as cmd
 from gigex import Gigex
@@ -22,7 +23,7 @@ class Backend():
         while not finished.is_set():
             try:
                 d = s.recv(4096)
-                if output is not None: output(d)
+                output(d)
             except socket.timeout as e:
                 pass
 
@@ -37,13 +38,17 @@ class Backend():
         self.finished.set()
         self.acq_thread.join()
 
-    def __init__(self, label, ip):
+    def __init__(self, ip):
         self.ip = ip
-        self.label = label
-        self.gx = Gigex(ip)
+        self.gx = Gigex(self.ip)
+
+        with self.gx:
+            pass
+            #self.gx.reboot()
+
         self.finished = threading.Event()
         self.acq_thread = None
-        self.data_output = lambda d: print("{}: {}".format(self.ip, d))
+        self.data_output = lambda data: None
         self.frontend = [Frontend(self, i) for i in range(4)]
 
     def __getattr__(self, attr):
