@@ -5,6 +5,17 @@ from contextlib import ExitStack
 from frontend_ui import FrontendUI
 
 class BackendUI():
+
+    def __getattr__(self, attr):
+        return getattr(self.backend, attr)
+
+    def print(self, txt):
+        self.data.insert(tk.END, str(txt) + "\n")
+        self.data.yview(tk.END)
+
+    def update_all_temp(self):
+        [f.get_temp() for f in self.frontend]
+
     def update_output_dir(self):
         dirname = filedialog.askdirectory()
         fun = self.print
@@ -29,6 +40,7 @@ class BackendUI():
         # Now that an output field exists for the backend, update the write function
         self.backend = backend_instance
         self.backend.wr_func.set(self.print)
+
         self.frame = tk.Frame(parent_frame, relief = tk.GROOVE, borderwidth = 1)
         self.frame.pack(fill = tk.X, expand = True, padx = 10, pady = 10)
 
@@ -65,10 +77,6 @@ class BackendUI():
             fe = self.backend.frontend[i]
             self.frontend.append(FrontendUI(fe, self.m_frame[-1]))
 
-    def print(self, txt):
-        self.data.insert(tk.END, str(txt) + "\n")
-        self.data.yview(tk.END)
-
-    def __getattr__(self, attr):
-        return getattr(self.backend, attr)
+        # allow the backend instance to update the frontend temperature indicators
+        self.backend.__setattr__('mon_cb', self.update_all_temp)
 

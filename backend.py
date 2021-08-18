@@ -38,15 +38,23 @@ class Backend():
 
         s.close()
 
+    def mon(self, interval = 5.0):
+        while not self.finished.wait(interval):
+            if self.mon_cb is not None:
+                self.mon_cb()
+
     def __enter__(self):
-        self.acq_thread = threading.Thread(target = Backend.acq, args = [self])
+        self.acq_thread = threading.Thread(target = self.acq)
+        self.mon_thread = threading.Thread(target = self.mon)
         self.finished.clear()
         self.acq_thread.start()
+        self.mon_thread.start()
         return self
 
     def __exit__(self, *context):
         self.finished.set()
         self.acq_thread.join()
+        self.mon_thread.join()
 
     def __init__(self, ip):
         self.ip = ip
@@ -54,6 +62,8 @@ class Backend():
         self.finished = threading.Event()
         self.wr_func = BackendWriteFunc()
         self.acq_thread = None
+        self.mon_thread = None
+        self.mon_cb = None
         self.frontend = [Frontend(self, i) for i in range(4)]
 
     def __getattr__(self, attr):

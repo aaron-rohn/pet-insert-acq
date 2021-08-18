@@ -1,5 +1,6 @@
 import time
 import socket
+import threading
 
 class Gigex():
     sys_port = 0x5001
@@ -7,8 +8,10 @@ class Gigex():
     def __init__(self, ip):
         self.ip = ip
         self.sys = None
+        self.lock = threading.Lock()
 
     def __enter__(self):
+        self.lock.acquire()
         self.sys = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sys.settimeout(1)
         self.sys.connect((self.ip, Gigex.sys_port))
@@ -16,6 +19,7 @@ class Gigex():
 
     def __exit__(self, *context):
         self.sys.close()
+        self.lock.release()
 
     def spi(self, *data):
         nwords_i = len(data)
