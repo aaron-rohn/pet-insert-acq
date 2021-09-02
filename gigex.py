@@ -40,10 +40,10 @@ class Gigex():
         return ((code == 0xEE) & (stat == 0), resp)
 
     def spi_query(self, cmd):
-        print(hex(cmd))
+        #print(hex(cmd))
         self.spi(cmd)
         status, value = self.spi(0)
-        print(hex(value[0]))
+        #print(hex(value[0]))
         return value[0] if status else None
 
     def reboot(self):

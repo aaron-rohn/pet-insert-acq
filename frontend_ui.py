@@ -23,14 +23,17 @@ class FrontendUI():
 
     def get_temp(self, minrange = 20.0, maxrange = 30.0):
         temps = self.frontend.get_temp()
-        print(temps)
+        #print(temps)
         for t,ts in zip(temps, self.temp_status):
-            if minrange < t < maxrange:
+            if t < minrange:
+                g = 0xFF
+                r = 0x0
+            elif t < maxrange:
                 g = round((1.0 - (t - minrange) / (maxrange - minrange)) * 0xFF)
                 r = round((t - minrange) / (maxrange - minrange) * 0xFF)
             else:
-                g = 0
-                r = 0
+                g = 0x0
+                r = 0xFF
 
             col = '#%02X%02X%02X' % (r, g, 0)
             ts.config(bg = col)

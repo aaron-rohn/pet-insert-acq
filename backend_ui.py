@@ -1,7 +1,7 @@
 import os
+import contextlib
 import tkinter as tk
 from tkinter import filedialog
-from contextlib import ExitStack
 from frontend_ui import FrontendUI
 
 class BackendUI():
@@ -9,38 +9,27 @@ class BackendUI():
     def __getattr__(self, attr):
         return getattr(self.backend, attr)
 
-    def print(self, txt):
-        self.data.insert(tk.END, str(txt) + "\n")
-        self.data.yview(tk.END)
-
     def update_all_temp(self):
         [f.get_temp() for f in self.frontend]
 
     def update_output_dir(self):
-        dirname = filedialog.askdirectory()
-        fun = self.print
-
         try:
+            dirname = filedialog.askdirectory()
             if not dirname: raise Exception('No file selected')
             fname = dirname + '/' + self.ip + '.dat'
-
-            with ExitStack() as stack:
-                f = stack.enter_context(open(fname, 'wb'))
-                self._stack = stack.pop_all()
-                fun = lambda data: f.write(data)
-                self.file_indicator.config(text = fname)
-
+            self.backend.file_queue.put(fname)
+            self.backend.ui_queue.put(None)
+            self.file_indicator.config(text = fname)
         except Exception as e:
             self.file_indicator.config(text = str(e))
+            self.backend.file_queue.put(os.devnull)
+            self.backend.ui_queue.put(self.data)
 
-        finally:
-            self.backend.wr_func.set(fun)
+        self.backend.update_queue.set()
 
     def __init__(self, backend_instance, parent_frame):
         # Now that an output field exists for the backend, update the write function
         self.backend = backend_instance
-        self.backend.wr_func.set(self.print)
-
         self.frame = tk.Frame(parent_frame, relief = tk.GROOVE, borderwidth = 1)
         self.frame.pack(fill = tk.X, expand = True, padx = 10, pady = 10)
 
@@ -53,6 +42,9 @@ class BackendUI():
         self.label.pack(side = tk.LEFT, padx = 10)
         self.status.pack(side = tk.LEFT, padx = 10)
         self.data.pack(side = tk.LEFT, padx = 10, pady = 10, expand = True, fill = tk.X)
+
+        self.backend.ui_queue.put(self.data)
+        self.backend.update_queue.set()
 
         # Frame with Directory select button, indicator of current directory
         self.file_output = tk.Frame(self.frame)
