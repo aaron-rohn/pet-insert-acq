@@ -293,6 +293,7 @@ done_reading:
         
         std::vector<uint16_t> e1, e2, block;
         std::vector<double> x, y;
+        std::vector<uint64_t> abs_time;
 
         for (Event &ev : events)
         {
@@ -301,6 +302,7 @@ done_reading:
             x.push_back(ev.x);
             y.push_back(ev.y);
             block.push_back(ev.block);
+            abs_time.push_back(ev.abs_time);
         }
 
         return Rcpp::DataFrame::create(
@@ -308,7 +310,8 @@ done_reading:
                 Rcpp::Named("e2") = e2,
                 Rcpp::Named("x") = x,
                 Rcpp::Named("y") = y,
-                Rcpp::Named("block") = block
+                Rcpp::Named("block") = block,
+                Rcpp::Named("abs_time") = abs_time
             /*
                 Rcpp::Named("A") = A_vec,
                 Rcpp::Named("B") = B_vec,

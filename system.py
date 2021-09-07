@@ -5,8 +5,8 @@ from contextlib import ExitStack
 class System():
     def __init__(self):
         self.sync = Sync('192.168.1.100')
-        #backend_ips = ['192.168.1.101', '192.168.1.102', '192.168.2.103', '192.168.2.104']
-        backend_ips = ['192.168.1.101']
+        backend_ips = ['192.168.1.101', '192.168.1.102', '192.168.2.103', '192.168.2.104']
+        #backend_ips = ['192.168.1.101']
         self.backend = [Backend(a) for a in backend_ips]
 
     def __enter__(self):
