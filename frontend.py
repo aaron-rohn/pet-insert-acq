@@ -82,3 +82,8 @@ class Frontend():
         cmd = command.module_id(self.index)
         ret = self.backend.exec(cmd)
         return command.module(ret)
+
+    def get_current(self):
+        cmd = command.get_current(self.index & 0x3)
+        resp = self.backend.exec(cmd)
+        return command.payload(resp)

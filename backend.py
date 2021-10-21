@@ -7,9 +7,6 @@ import command as cmd
 from gigex import Gigex
 from frontend import Frontend
 
-def mask_to_bool(val, n = 4):
-    return [bool(val & (1 << i)) for i in range(n)]
-
 data_port = 5555
 
 class Backend():
@@ -61,6 +58,7 @@ class Backend():
                 try:
                     self.mon_cb()
                 except RuntimeError as e:
+                    # UI thread has exited
                     break
 
     def __init__(self, ip):
@@ -74,16 +72,19 @@ class Backend():
         self.ui_queue = queue.Queue()
         self.mon_cb = None
         self.frontend = [Frontend(self, i) for i in range(4)]
+        self.set_network_led(True)
 
     def __enter__(self):
-        self.acq_thread = threading.Thread(target = self.acq)
-        self.mon_thread = threading.Thread(target = self.mon)
+        self.acq_thread = threading.Thread(target = self.acq, daemon = True)
+        self.mon_thread = threading.Thread(target = self.mon, daemon = True)
         self.finished.clear()
         self.acq_thread.start()
         self.mon_thread.start()
+        self.set_network_led(True)
         return self
 
     def __exit__(self, *context):
+        self.set_network_led(False)
         self.finished.set()
         self.acq_thread.join()
         self.mon_thread.join()
@@ -95,22 +96,31 @@ class Backend():
         with self.gx:
             return self.gx.spi_query(cmd_int)
 
+    def reset(self):
+        self.exec(cmd.rst())
+        return None
+
+    def set_network_led(self, up = True):
+        self.exec(cmd.backend_network_set(up))
+        return None
+
     def get_status(self):
-        resp = self.exec(cmd.backend_status(10))
+        value_in = 10
+        resp = self.exec(cmd.backend_status(value_in))
         value_out = cmd.payload(resp)
-        return (value_out == 10)
+        return (value_out == value_in)
 
     def get_rx_status(self):
         resp = self.exec(cmd.gpio_rd_rx_err())
-        return mask_to_bool(cmd.payload(resp) & 0xF)
+        return cmd.mask_to_bool(cmd.payload(resp) & 0xF)
 
     def get_tx_status(self):
         resp = self.exec(cmd.gpio_rd_tx_idle())
-        return mask_to_bool(cmd.payload(resp) & 0xF)
+        return cmd.mask_to_bool(cmd.payload(resp) & 0xF)
 
     def get_set_power(self, update = False, state = [False]*4):
         resp = self.exec(cmd.set_power(update, state))
-        return mask_to_bool(cmd.payload(resp))
+        return cmd.mask_to_bool(cmd.payload(resp))
 
     def get_current(self):
         resp = [self.exec(cmd.get_current(m)) for m in range(4)]

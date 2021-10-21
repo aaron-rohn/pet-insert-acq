@@ -8,7 +8,7 @@ class Sync():
 
     def rst(self):
         with self.gx:
-            cmd = command.rst()
+            cmd = command.CMD_EMPTY
             resp = self.gx.spi_query(cmd)
             return resp == (command.CMD_EMPTY | 0x1)
 

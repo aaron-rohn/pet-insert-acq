@@ -1,4 +1,5 @@
 import time
+import numpy as np
 import tkinter as tk
 from tkinter.ttk import Separator
 
@@ -21,7 +22,7 @@ class SystemUI():
         sys_rx = self.sys.get_rx_status()
         for be, be_rx in zip(self.backend, sys_rx):
             for fe, err in zip(be.frontend, be_rx):
-                fe.status.config(bg = 'green' if not err else 'red')
+                fe.status.config(bg = 'red' if err else 'green')
 
     def get_set_power(self, update = False):
         states = []
@@ -40,19 +41,53 @@ class SystemUI():
     def get_current(self):
         print(self.sys.get_current())
 
-    def power_toggle_cb(self, turn_on = False):
-        self.sys.get_set_power(True, [[turn_on]*4]*4)
+    def update_pwr_states(self):
         pwr_states = self.get_set_power()
         for b,s_all in zip(self.backend, pwr_states):
             [v.set(s) for v,s in zip(b.m_pow_var, s_all)]
 
-        # Wait for frontend board to power on??
-        if turn_on: time.sleep(1)
+    def power_toggle_cb(self, turn_on = False):
+        if turn_on:
+            popup = tk.Toplevel(self.root)
+            popup.title('Power on')
+            popup.attributes('-type', 'dialog')
+            popup_status = tk.Label(popup, text = 'Module: 0')
+            popup_status.pack(pady = 20, padx = 20)
+
+            for i in range(1,5):
+                pwr = [True]*i + [False]*(4-i)
+                self.sys.get_set_power(True, [pwr]*4)
+                popup_status.config(text = f'Module: {i}')
+
+                time.sleep(1)
+                self.update_pwr_states()
+
+            popup.destroy()
+
+        else:
+            self.sys.get_set_power(True, [[False]*4]*4)
+
+        self.update_pwr_states()
         self.get_status()
 
     def bias_toggle_cb(self, turn_on = False):
-        bias_val = 29.5 if turn_on else 0.0
-        self.sys.set_bias(bias_val)
+        if turn_on:
+            popup = tk.Toplevel(self.root)
+            popup.title('Bias on')
+            popup.attributes('-type', 'dialog')
+            popup_status = tk.Label(popup, text = 'Bias: 0.0')
+            popup_status.pack(pady = 20, padx = 20)
+
+            vals = np.linspace(0.0, 29.5, 5)
+            for v in vals:
+                self.sys.set_bias(v)
+                popup_status.config(text = f'Bias: {round(v,1)}')
+                time.sleep(1)
+
+            popup.destroy()
+
+        else:
+            self.sys.set_bias(0.0)
 
     def __init__(self, system_instance):
         self.root = tk.Tk()
