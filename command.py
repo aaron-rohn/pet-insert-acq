@@ -22,10 +22,13 @@ def payload(cmd_int):
     return cmd_int & 0xFFFFF
 
 def module(cmd_int):
-    return (cmd_int >> 24) & 0xF
+    return (cmd_int >> 24) & 0xF if cmd_int >= 0 else cmd_int
 
 def build(m, c, p):
     return CMD_EMPTY | ((m & 0xF) << 24) | ((c & 0xF) << 20) | (p & 0xFFFFF)
+
+def is_command(cmd_int):
+    return (cmd_int >> 28) == 0xF
 
 # Backend commands
 

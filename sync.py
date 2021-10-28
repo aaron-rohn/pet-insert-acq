@@ -6,6 +6,10 @@ class Sync():
         self.ip = ip
         self.gx = Gigex(self.ip)
 
+        with self.gx:
+            cmd = command.backend_network_set()
+            self.gx.spi_query(cmd)
+
     def rst(self):
         with self.gx:
             cmd = command.CMD_EMPTY

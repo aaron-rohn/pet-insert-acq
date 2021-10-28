@@ -48,6 +48,7 @@ class SystemUI():
 
     def power_toggle_cb(self, turn_on = False):
         if turn_on:
+            """
             popup = tk.Toplevel(self.root)
             popup.title('Power on')
             popup.attributes('-type', 'dialog')
@@ -63,7 +64,8 @@ class SystemUI():
                 self.update_pwr_states()
 
             popup.destroy()
-
+            """
+            self.sys.get_set_power(True, [[True]*4]*4)
         else:
             self.sys.get_set_power(True, [[False]*4]*4)
 
@@ -72,6 +74,7 @@ class SystemUI():
 
     def bias_toggle_cb(self, turn_on = False):
         if turn_on:
+            """
             popup = tk.Toplevel(self.root)
             popup.title('Bias on')
             popup.attributes('-type', 'dialog')
@@ -85,7 +88,8 @@ class SystemUI():
                 time.sleep(1)
 
             popup.destroy()
-
+            """
+            self.sys.set_bias(29.5)
         else:
             self.sys.set_bias(0.0)
 

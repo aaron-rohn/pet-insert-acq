@@ -1,6 +1,7 @@
 import time
 import socket
 import threading
+import command
 
 class Gigex():
     sys_port = 0x5001
@@ -24,8 +25,6 @@ class Gigex():
     def spi(self, *data):
         nwords_i = len(data)
         nwords_b = nwords_i.to_bytes(4,'big')
-
-        data = [0] if nwords_i == 0 else data
         data = b''.join([d.to_bytes(4,'big') for d in data])
 
         cmd = ((0xEE2120FF).to_bytes(4,'big') +
@@ -37,13 +36,30 @@ class Gigex():
         resp = [resp[i:i+4] for i in range(0, len(resp), 4)]
         resp = [int.from_bytes(r,'big') for r in resp]
 
-        return ((code == 0xEE) & (stat == 0), resp)
+        return (code == 0xEE) and (stat == 0), resp
 
     def spi_query(self, cmd):
-        #print(hex(cmd))
-        self.spi(cmd)
-        status, value = self.spi(0)
-        #print(hex(value[0]))
+
+        class ExitLoop(Exception): pass
+
+        try:
+            # Try to send the command multiple times
+            for _ in range(5):
+                self.spi(cmd)
+
+                # Check multiple times for a response
+                for _ in range(5):
+                    status, value = self.spi(0)
+
+                    # Finish when a valid response is recevied
+                    if command.is_command(value[0]):
+                        raise ExitLoop
+
+            status = False
+
+        except ExitLoop:
+            pass
+
         return value[0] if status else None
 
     def reboot(self):
@@ -51,5 +67,5 @@ class Gigex():
         self.sys.send(cmd)
         resp = self.sys.recv(1024)
         # returns true on success
-        return (resp[0] == 0xF1) & (resp[1] == 0x00)
+        return resp[0] == 0xF1 and resp[1] == 0x00
 

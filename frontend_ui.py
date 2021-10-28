@@ -21,8 +21,8 @@ class FrontendUI():
         self.frontend = frontend_instance
         self.frame = parent_frame
 
-        self.status = tk.Canvas(self.frame, bg = 'red', height = 10, width = 10, text = 'status')
-        self.current = tk.Canvas(self.frame, bg = 'red', height = 10, width = 10, text = 'current')
+        self.status = tk.Canvas(self.frame, bg = 'red', height = 10, width = 10)
+        self.current = tk.Canvas(self.frame, bg = 'red', height = 10, width = 10)
         self.bias = ToggleButton(self.frame, "Bias On", "Bias Off", self.bias_toggle_cb, width = 10)
         self.temp_status = [tk.Canvas(self.frame, bg = 'red', height = 10, width = 10) for _ in range(8)]
 

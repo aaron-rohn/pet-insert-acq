@@ -72,7 +72,6 @@ class Backend():
         self.ui_queue = queue.Queue()
         self.mon_cb = None
         self.frontend = [Frontend(self, i) for i in range(4)]
-        self.set_network_led(True)
 
     def __enter__(self):
         self.acq_thread = threading.Thread(target = self.acq, daemon = True)
@@ -80,11 +79,11 @@ class Backend():
         self.finished.clear()
         self.acq_thread.start()
         self.mon_thread.start()
-        self.set_network_led(True)
+        self.set_network_led(clear = False)
         return self
 
     def __exit__(self, *context):
-        self.set_network_led(False)
+        self.set_network_led(clear = True)
         self.finished.set()
         self.acq_thread.join()
         self.mon_thread.join()
@@ -100,8 +99,8 @@ class Backend():
         self.exec(cmd.rst())
         return None
 
-    def set_network_led(self, up = True):
-        self.exec(cmd.backend_network_set(up))
+    def set_network_led(self, clear = False):
+        self.exec(cmd.backend_network_set(clear))
         return None
 
     def get_status(self):

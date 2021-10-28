@@ -66,21 +66,21 @@ class Frontend():
     def set_dac(self, is_bias, block, value):
         ch, val = (bias_ch[block],bias_to_hex(value)) if is_bias else (thresh_ch[block],thresh_to_hex(value))
         cmd = command.dac_write(self.index, ch, val)
-        ret = self.backend.exec(cmd)
+        ret = self.backend.exec(cmd) or -1
         return ret
 
     def get_temp(self):
         temps = []
         for adc_ch in temp_channels.values():
             cmd = command.adc_read(self.index, adc_ch)
-            ret = self.backend.exec(cmd)
+            ret = self.backend.exec(cmd) or 0
             ret = adc_to_temp(ret & 0xFFF)
             temps.append(ret)
         return temps
 
     def get_physical_idx(self):
         cmd = command.module_id(self.index)
-        ret = self.backend.exec(cmd)
+        ret = self.backend.exec(cmd) or -1
         return command.module(ret)
 
     def get_current(self):
