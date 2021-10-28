@@ -30,14 +30,13 @@ class BackendUI():
         self.backend.update_queue.set()
 
     def __init__(self, backend_instance, parent_frame):
-        # Now that an output field exists for the backend, update the write function
         self.backend = backend_instance
         self.frame = tk.Frame(parent_frame, relief = tk.GROOVE, borderwidth = 1)
         self.frame.pack(fill = tk.X, expand = True, padx = 10, pady = 10)
 
         # Frame with Label, status, and data output text field
         self.common = tk.Frame(self.frame)
-        self.label  = tk.Label(self.common, text = "Data: {}".format(self.backend.ip))
+        self.label  = tk.Label(self.common, text = f'Data: {self.backend.ip}')
         self.rst    = tk.Button(self.common, text = "Reset", command = self.backend.reset)
         self.status = tk.Canvas(self.common, bg = 'red', height = 10, width = 10)
         self.data   = tk.Text(self.common, height = 2, takefocus = False)
@@ -48,6 +47,7 @@ class BackendUI():
         self.status.pack(side = tk.LEFT, padx = 5)
         self.data.pack(side = tk.LEFT, padx = 5, pady = 10, expand = True, fill = tk.X)
 
+        # Now that an output field exists for the backend, update the write function
         self.backend.ui_queue.put(self.data)
         self.backend.update_queue.set()
 

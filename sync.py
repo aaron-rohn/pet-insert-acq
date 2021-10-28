@@ -8,7 +8,7 @@ class Sync():
 
         with self.gx:
             cmd = command.backend_network_set()
-            self.gx.spi_query(cmd)
+            self.gx.spi(cmd)
 
     def rst(self):
         with self.gx:

@@ -74,19 +74,21 @@ class Backend():
         self.frontend = [Frontend(self, i) for i in range(4)]
 
     def __enter__(self):
+        print("enter")
         self.acq_thread = threading.Thread(target = self.acq, daemon = True)
         self.mon_thread = threading.Thread(target = self.mon, daemon = True)
         self.finished.clear()
         self.acq_thread.start()
-        self.mon_thread.start()
+        #self.mon_thread.start()
         self.set_network_led(clear = False)
         return self
 
     def __exit__(self, *context):
+        print("exit")
         self.set_network_led(clear = True)
         self.finished.set()
         self.acq_thread.join()
-        self.mon_thread.join()
+        #self.mon_thread.join()
 
     def __getattr__(self, attr):
         return lambda *args, **kwds: [getattr(f, attr)(*args, **kwds) for f in self.frontend]
@@ -96,32 +98,32 @@ class Backend():
             return self.gx.spi_query(cmd_int)
 
     def reset(self):
-        self.exec(cmd.rst())
-        return None
+        with self.gx:
+            self.gx.spi(cmd.rst())
 
     def set_network_led(self, clear = False):
         self.exec(cmd.backend_network_set(clear))
-        return None
 
     def get_status(self):
-        value_in = 10
-        resp = self.exec(cmd.backend_status(value_in))
-        value_out = cmd.payload(resp)
-        return (value_out == value_in)
+        c = cmd.backend_status(10)
+        return self.exec(c) == c
 
     def get_rx_status(self):
         resp = self.exec(cmd.gpio_rd_rx_err())
-        return cmd.mask_to_bool(cmd.payload(resp) & 0xF)
+        if resp is None:
+            return [True]*4 # True indicates error
+        else:
+            return cmd.mask_to_bool(cmd.payload(resp) & 0xF)
 
-    def get_tx_status(self):
-        resp = self.exec(cmd.gpio_rd_tx_idle())
-        return cmd.mask_to_bool(cmd.payload(resp) & 0xF)
+    def get_power(self):
+        resp = self.exec(cmd.set_power(False, [False]*4))
+        return None if resp is None else cmd.mask_to_bool(cmd.payload(resp))
 
-    def get_set_power(self, update = False, state = [False]*4):
-        resp = self.exec(cmd.set_power(update, state))
-        return cmd.mask_to_bool(cmd.payload(resp))
+    def set_power(self, state = [False]*4):
+        resp = self.exec(cmd.set_power(True, state))
+        return None if resp is None else cmd.mask_to_bool(cmd.payload(resp))
 
     def get_current(self):
         resp = [self.exec(cmd.get_current(m)) for m in range(4)]
-        return [cmd.payload(m) for m in resp]
+        return [-1 if resp is None else cmd.payload(m) for m in resp]
 

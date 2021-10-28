@@ -2,6 +2,8 @@ import tkinter as tk
 from toggle_button import ToggleButton
 
 def scale_value(value, minrange, maxrange):
+    if value < 0: return 'black'
+
     if value < minrange:
         g = 0xFF
         r = 0x0
@@ -23,18 +25,11 @@ class FrontendUI():
 
         self.status = tk.Canvas(self.frame, bg = 'red', height = 10, width = 10)
         self.current = tk.Canvas(self.frame, bg = 'red', height = 10, width = 10)
-        self.bias = ToggleButton(self.frame, "Bias On", "Bias Off", self.bias_toggle_cb, width = 10)
         self.temp_status = [tk.Canvas(self.frame, bg = 'red', height = 10, width = 10) for _ in range(8)]
 
         self.status.pack(side = tk.LEFT, padx = 10)
         self.current.pack(side = tk.LEFT, padx = 10)
-        self.bias.pack(side = tk.LEFT)
         [ts.pack(side = tk.LEFT, padx = 20) for ts in self.temp_status]
-
-    def bias_toggle_cb(self, turn_on = False, on_val = 29.5):
-        on_val = min(29.5, on_val)
-        bias_val = on_val if turn_on else 0.0
-        self.frontend.set_bias(bias_val)
 
     def get_temp(self):
         temps = self.frontend.get_temp()
@@ -44,7 +39,7 @@ class FrontendUI():
 
     def get_current(self):
         c = self.frontend.get_current()
-        col = scale_value(c, 600, 800)
+        col = scale_value(c, 600, 700)
         self.current.config(bg = col)
 
     def get_id(self):

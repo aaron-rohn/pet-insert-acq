@@ -24,14 +24,6 @@ class SystemUI():
             for fe, err in zip(be.frontend, be_rx):
                 fe.status.config(bg = 'red' if err else 'green')
 
-    def get_set_power(self, update = False):
-        states = []
-        for b in self.backend:
-            states.append([v.get() for v in b.m_pow_var])
-        states = self.sys.get_set_power(update, states)
-        print(states)
-        return states
-
     def enumerate(self):
         sys_idx = self.sys.get_physical_idx()
         for be, be_idx in zip(self.backend, sys_idx):
@@ -41,54 +33,64 @@ class SystemUI():
     def get_current(self):
         print(self.sys.get_current())
 
-    def update_pwr_states(self):
-        pwr_states = self.get_set_power()
-        for b,s_all in zip(self.backend, pwr_states):
-            [v.set(s) for v,s in zip(b.m_pow_var, s_all)]
+    def get_temp(self):
+        print(self.sys.get_temp())
+
+    def set_pwr_vars(self, states):
+        for be, be_state in zip(self.backend, states):
+            if be_state is None:
+                [var.set(False) for var in be.m_pow_var]
+            else:
+                [var.set(state) for var,state in zip(be.m_pow_var, be_state)]
+
+    def get_pwr_vars(self):
+        return [[var.get() for var in b.m_pow_var] for b in self.backend]
+
+    def get_power(self):
+        states_in = self.sys.get_power()
+        self.set_pwr_vars(states_in)
+        states_out = self.get_pwr_vars()
+
+        if states_out != states_in:
+            print("Error getting power states")
+
+        return states_out
+
+    def set_power(self):
+        states_in = self.get_pwr_vars()
+        states_out = self.sys.set_power(states_in)
+
+        if states_out != states_in:
+            print("Error setting power states")
+
+        return states_out
 
     def power_toggle_cb(self, turn_on = False):
-        if turn_on:
-            """
-            popup = tk.Toplevel(self.root)
-            popup.title('Power on')
-            popup.attributes('-type', 'dialog')
-            popup_status = tk.Label(popup, text = 'Module: 0')
-            popup_status.pack(pady = 20, padx = 20)
+        popup = tk.Toplevel(self.root)
+        popup.title('Power on' if turn_on else 'Power off')
+        popup.attributes('-type', 'dialog')
+        popup_status = tk.Label(popup, text = 'Module: 0')
+        popup_status.pack(pady = 20, padx = 20)
 
-            for i in range(1,5):
-                pwr = [True]*i + [False]*(4-i)
-                self.sys.get_set_power(True, [pwr]*4)
-                popup_status.config(text = f'Module: {i}')
+        pwr = self.get_power()
+        n = 4
 
-                time.sleep(1)
-                self.update_pwr_states()
+        for i in range(n):
+            for elem in pwr: elem[i] = turn_on
+            new_pwr = self.sys.set_power(pwr)
 
-            popup.destroy()
-            """
-            self.sys.get_set_power(True, [[True]*4]*4)
-        else:
-            self.sys.get_set_power(True, [[False]*4]*4)
+            self.set_pwr_vars(new_pwr)
+            popup_status.config(text = f'Module: {i}')
+            self.root.update()
+            time.sleep(1)
 
-        self.update_pwr_states()
+        popup.destroy()
+
+        self.get_power()
         self.get_status()
 
     def bias_toggle_cb(self, turn_on = False):
         if turn_on:
-            """
-            popup = tk.Toplevel(self.root)
-            popup.title('Bias on')
-            popup.attributes('-type', 'dialog')
-            popup_status = tk.Label(popup, text = 'Bias: 0.0')
-            popup_status.pack(pady = 20, padx = 20)
-
-            vals = np.linspace(0.0, 29.5, 5)
-            for v in vals:
-                self.sys.set_bias(v)
-                popup_status.config(text = f'Bias: {round(v,1)}')
-                time.sleep(1)
-
-            popup.destroy()
-            """
             self.sys.set_bias(29.5)
         else:
             self.sys.set_bias(0.0)
@@ -96,17 +98,14 @@ class SystemUI():
     def __init__(self, system_instance):
         self.root = tk.Tk()
 
-        self.sys = system_instance
-        self.sync = SyncUI(self.sys.sync, self.root)
-        self.backend = [BackendUI(b, self.root) for b in self.sys.backend]
-
         self.refresh = tk.Button(self.root, text = "Refresh", command = self.get_status)
         self.enum = tk.Button(self.root, text = "Enumerate", command = self.enumerate)
         self.power_toggle = ToggleButton(self.root, "Power ON", "Power OFF", self.power_toggle_cb)
         self.bias_toggle = ToggleButton(self.root, "Bias ON", "Bias OFF", self.bias_toggle_cb)
-        self.power_rd = tk.Button(self.root, text = "Read power state", command = self.get_set_power)
-        self.power_wr = tk.Button(self.root, text = "Set power state", command = lambda: self.get_set_power(True))
+        self.power_rd = tk.Button(self.root, text = "Read power state", command = self.get_power)
+        self.power_wr = tk.Button(self.root, text = "Set power state", command = self.set_power)
         self.current = tk.Button(self.root, text = "Read current", command = self.get_current)
+        self.temps   = tk.Button(self.root, text = "Read temperature", command = self.get_temp)
 
         pack_args = {'fill': tk.X, 'expand': True, 'padx': 10, 'pady': 10}
         self.refresh.pack(**pack_args)
@@ -119,8 +118,14 @@ class SystemUI():
         self.power_rd.pack(**pack_args)
         self.power_wr.pack(**pack_args)
         self.current.pack(**pack_args)
+        self.temps.pack(**pack_args)
 
         self.root.bind('<Escape>', lambda *args: self.root.quit())
+
+        self.sys = system_instance
+        self.sync = SyncUI(self.sys.sync, self.root)
+        self.backend = [BackendUI(b, self.root) for b in self.sys.backend]
+        self.get_status()
 
 if __name__ == "__main__":
     sys = System()

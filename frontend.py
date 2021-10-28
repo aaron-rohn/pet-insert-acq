@@ -48,7 +48,8 @@ def res_to_temp(R, R0 = 10000, T0 = 298.15, B = 3900):
         return 0
 
 def adc_to_temp(adc_val):
-    voltage = (adc_val / 0x7FF) * 2.048
+    if adc_val < 0: return adc_val
+    voltage = ((adc_val & 0xFFF) / 0x7FF) * 2.048
     resistance = voltage_to_res(voltage)
     return res_to_temp(resistance)
 
@@ -73,17 +74,17 @@ class Frontend():
         temps = []
         for adc_ch in temp_channels.values():
             cmd = command.adc_read(self.index, adc_ch)
-            ret = self.backend.exec(cmd) or 0
-            ret = adc_to_temp(ret & 0xFFF)
+            ret = self.backend.exec(cmd) or -1
+            ret = adc_to_temp(ret)
             temps.append(ret)
         return temps
 
     def get_physical_idx(self):
         cmd = command.module_id(self.index)
-        ret = self.backend.exec(cmd) or -1
-        return command.module(ret)
+        ret = self.backend.exec(cmd)
+        return -1 if ret is None else command.module(ret)
 
     def get_current(self):
         cmd = command.get_current(self.index & 0x3)
-        resp = self.backend.exec(cmd)
-        return command.payload(resp)
+        ret = self.backend.exec(cmd)
+        return -1 if ret is None else command.payload(ret)

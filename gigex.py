@@ -14,7 +14,7 @@ class Gigex():
     def __enter__(self):
         self.lock.acquire()
         self.sys = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sys.settimeout(1)
+        self.sys.settimeout(0.1)
         self.sys.connect((self.ip, Gigex.sys_port))
         return self
 
@@ -47,6 +47,13 @@ class Gigex():
             for _ in range(5):
                 self.spi(cmd)
 
+                for _ in range(10):
+                    status, value = self.spi(0)
+                    if value == 0: break
+                else:
+                    print("Initial command response not found")
+                    continue
+
                 # Check multiple times for a response
                 for _ in range(5):
                     status, value = self.spi(0)
@@ -56,6 +63,7 @@ class Gigex():
                         raise ExitLoop
 
             status = False
+            print("sending command failed")
 
         except ExitLoop:
             pass
