@@ -101,6 +101,10 @@ class Backend():
         with self.gx:
             self.gx.spi(cmd.rst())
 
+    def flush(self):
+        with self.gx:
+            self.gx.flush()
+
     def set_network_led(self, clear = False):
         self.exec(cmd.backend_network_set(clear))
 

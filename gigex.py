@@ -22,6 +22,15 @@ class Gigex():
         self.sys.close()
         self.lock.release()
 
+    def flush(self):
+        #timeout = self.sys.gettimeout()
+        #self.sys.settimeout(1)
+        try:
+            self.sys.recv(1024*10)
+        except socket.timeout:
+            pass
+        #self.sys.settimeout(timeout)
+
     def spi(self, *data):
         nwords_i = len(data)
         nwords_b = nwords_i.to_bytes(4,'big')
@@ -46,13 +55,6 @@ class Gigex():
             # Try to send the command multiple times
             for _ in range(5):
                 self.spi(cmd)
-
-                for _ in range(10):
-                    status, value = self.spi(0)
-                    if value == 0: break
-                else:
-                    print("Initial command response not found")
-                    continue
 
                 # Check multiple times for a response
                 for _ in range(5):

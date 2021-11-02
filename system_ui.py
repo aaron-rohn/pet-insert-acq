@@ -78,6 +78,7 @@ class SystemUI():
         for i in range(n):
             for elem in pwr: elem[i] = turn_on
             new_pwr = self.sys.set_power(pwr)
+            [be.flush() for be in self.sys.backend]
 
             self.set_pwr_vars(new_pwr)
             popup_status.config(text = f'Module: {i}')
@@ -97,6 +98,9 @@ class SystemUI():
 
     def __init__(self, system_instance):
         self.root = tk.Tk()
+        self.sys = system_instance
+        self.sync = SyncUI(self.sys.sync, self.root)
+        self.backend = [BackendUI(b, self.root) for b in self.sys.backend]
 
         self.refresh = tk.Button(self.root, text = "Refresh", command = self.get_status)
         self.enum = tk.Button(self.root, text = "Enumerate", command = self.enumerate)
@@ -121,11 +125,6 @@ class SystemUI():
         self.temps.pack(**pack_args)
 
         self.root.bind('<Escape>', lambda *args: self.root.quit())
-
-        self.sys = system_instance
-        self.sync = SyncUI(self.sys.sync, self.root)
-        self.backend = [BackendUI(b, self.root) for b in self.sys.backend]
-        self.get_status()
 
 if __name__ == "__main__":
     sys = System()
