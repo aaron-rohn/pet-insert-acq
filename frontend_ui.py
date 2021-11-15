@@ -27,20 +27,29 @@ class FrontendUI():
         self.current = tk.Canvas(self.frame, bg = 'red', height = 10, width = 10)
         self.temp_status = [tk.Canvas(self.frame, bg = 'red', height = 10, width = 10) for _ in range(8)]
 
-        self.status.pack(side = tk.LEFT, padx = 10)
-        self.current.pack(side = tk.LEFT, padx = 10)
-        [ts.pack(side = tk.LEFT, padx = 20) for ts in self.temp_status]
+        tk.Label(self.frame, text = "Status:").pack(side = tk.LEFT, padx = 10)
+        self.status.pack(side = tk.LEFT)
+
+        tk.Label(self.frame, text = "Current:").pack(side = tk.LEFT, padx = 10)
+        self.current.pack(side = tk.LEFT)
+
+        tk.Label(self.frame, text = "Temp:").pack(side = tk.LEFT, padx = 10)
+        [ts.pack(side = tk.LEFT, padx = 10) for ts in self.temp_status]
 
     def get_temp(self):
         temps = self.frontend.get_temp()
+
         for t,ts in zip(temps, self.temp_status):
             col = scale_value(t, 20.0, 30.0)
             ts.config(bg = col)
+
+        return temps
 
     def get_current(self):
         c = self.frontend.get_current()
         col = scale_value(c, 600, 700)
         self.current.config(bg = col)
+        return c
 
     def get_id(self):
         self.frontend.get_physical_idx()

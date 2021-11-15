@@ -72,11 +72,13 @@ class Frontend():
 
     def get_temp(self):
         temps = []
+
         for adc_ch in temp_channels.values():
             cmd = command.adc_read(self.index, adc_ch)
             ret = self.backend.exec(cmd) or -1
             ret = adc_to_temp(ret)
             temps.append(ret)
+
         return temps
 
     def get_physical_idx(self):

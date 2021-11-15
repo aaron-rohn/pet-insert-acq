@@ -3,6 +3,7 @@ import socket
 import threading
 import queue
 import types
+from datetime import datetime
 import command as cmd
 from gigex import Gigex
 from frontend import Frontend
@@ -29,11 +30,9 @@ class Backend():
 
             if ui is not None:
                 try:
+                    ui.delete(1.0, 'end')
                     ui.insert('end', str(d) + "\n")
-                    ui.yview('end')
-                except RuntimeError as e:
-                    # happens when main thread has already exited
-                    break
+                except RuntimeError: break
 
             if self.update_queue.is_set():
                 self.update_queue.clear()
@@ -53,13 +52,25 @@ class Backend():
         s.close()
 
     def mon(self, interval = 5.0):
+        date = datetime.now().strftime('%Y%m%d--%H-%M-%S')
+        t_file = open(f'temperature/{self.ip}_{date}_temperature.txt', 'w')
+        c_file = open(f'current/{self.ip}_{date}_current.txt', 'w')
+
         while not self.finished.wait(interval):
             if self.mon_cb is not None:
                 try:
-                    self.mon_cb()
-                except RuntimeError as e:
-                    # UI thread has exited
-                    break
+                    temp, current = self.mon_cb()
+
+                    t_file.write(str(datetime.now()) + ',')
+                    t_file.write(','.join([str(t) for t in temp]) + '\n')
+
+                    c_file.write(str(datetime.now()) + ',')
+                    c_file.write(','.join([str(c) for c in current]) + '\n')
+
+                except RuntimeError: break
+
+        t_file.close()
+        c_file.close()
 
     def __init__(self, ip):
         self.ip = ip
@@ -74,21 +85,19 @@ class Backend():
         self.frontend = [Frontend(self, i) for i in range(4)]
 
     def __enter__(self):
-        print("enter")
         self.acq_thread = threading.Thread(target = self.acq, daemon = True)
         self.mon_thread = threading.Thread(target = self.mon, daemon = True)
         self.finished.clear()
         self.acq_thread.start()
-        #self.mon_thread.start()
+        self.mon_thread.start()
         self.set_network_led(clear = False)
         return self
 
     def __exit__(self, *context):
-        print("exit")
         self.set_network_led(clear = True)
         self.finished.set()
         self.acq_thread.join()
-        #self.mon_thread.join()
+        self.mon_thread.join()
 
     def __getattr__(self, attr):
         return lambda *args, **kwds: [getattr(f, attr)(*args, **kwds) for f in self.frontend]

@@ -65,7 +65,7 @@ class Gigex():
                         raise ExitLoop
 
             status = False
-            print("sending command failed")
+            #print("sending command failed")
 
         except ExitLoop:
             pass

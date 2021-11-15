@@ -28,7 +28,7 @@ class SystemUI():
         sys_idx = self.sys.get_physical_idx()
         for be, be_idx in zip(self.backend, sys_idx):
             for indicator, phys_idx in zip(be.m_pow, be_idx):
-                indicator.config(text = phys_idx)
+                indicator.config(text = str(phys_idx).rjust(2))
 
     def get_current(self):
         print(self.sys.get_current())

@@ -10,9 +10,17 @@ class BackendUI():
         return getattr(self.backend, attr)
 
     def update_ui_elements(self):
+        temps = []
+        currents = []
+
         for f in self.frontend:
-            f.get_temp()
-            f.get_current()
+            t = f.get_temp()
+            c = f.get_current()
+
+            temps += t
+            currents += [c]
+
+        return temps, currents
 
     def update_output_dir(self):
         try:
@@ -70,7 +78,13 @@ class BackendUI():
         for i in range(4):
             self.m_pow_var.append(tk.IntVar())
             self.m_frame.append(tk.Frame(self.frame))
-            self.m_pow.append(tk.Checkbutton(self.m_frame[-1], text = i, variable = self.m_pow_var[-1]))
+
+            cb = tk.Checkbutton(self.m_frame[-1],
+                                text = str(i).rjust(2),
+                                variable = self.m_pow_var[-1],
+                                font = 'TkFixedFont')
+
+            self.m_pow.append(cb)
             self.m_frame[-1].pack(fill = tk.X, expand = True)
             self.m_pow[-1].pack(side = tk.LEFT)
 
