@@ -6,8 +6,9 @@ class Sync():
         self.ip = ip
         self.gx = Gigex(self.ip)
 
+    def set_network_led(self, clear = False):
         with self.gx:
-            cmd = command.backend_network_set()
+            cmd = command.backend_network_set(clear)
             self.gx.spi(cmd)
 
     def rst(self):

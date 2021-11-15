@@ -11,12 +11,14 @@ class System():
         self._stack = None
 
     def __enter__(self):
+        self.sync.set_network_led(clear = False)
         with ExitStack() as stack:
             [stack.enter_context(b) for b in self.backend]
             self._stack = stack.pop_all()
         return self
     
     def __exit__(self, *context):
+        self.sync.set_network_led(clear = True)
         if self._stack is not None:
             self._stack.__exit__(self, *context)
 
