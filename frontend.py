@@ -61,21 +61,34 @@ class Frontend():
     def set_bias(self, value = 0.0):
         return [self.set_dac(True, i, value) for i in range(4)]
 
+    def get_bias(self):
+        return [hex(self.get_dac(True, i)) for i in range(4)]
+
     def set_thresh(self, value = 0.05):
         return [self.set_dac(False, i, value) for i in range(4)]
 
+    def get_thresh(self):
+        return [hex(self.get_dac(False, i)) for i in range(4)]
+
     def set_dac(self, is_bias, block, value):
-        ch, val = (bias_ch[block],bias_to_hex(value)) if is_bias else (thresh_ch[block],thresh_to_hex(value))
+        ch, val = ((  bias_ch[block],   bias_to_hex(value)) if is_bias else
+                   (thresh_ch[block], thresh_to_hex(value)))
+
         cmd = command.dac_write(self.index, ch, val)
-        ret = self.backend.exec(cmd) or -1
+        ret = self.backend.gx.send(cmd)
         return ret
+
+    def get_dac(self, is_bias, block):
+        ch = bias_ch[block] if is_bias else thresh_ch[block]
+        cmd = command.dac_read(self.index, ch)
+        return self.backend.gx.send(cmd) or -1
 
     def get_temp(self):
         temps = []
 
         for adc_ch in temp_channels.values():
             cmd = command.adc_read(self.index, adc_ch)
-            ret = self.backend.exec(cmd) or -1
+            ret = self.backend.gx.send(cmd) or -1
             ret = adc_to_temp(ret)
             temps.append(ret)
 
@@ -83,10 +96,36 @@ class Frontend():
 
     def get_physical_idx(self):
         cmd = command.module_id(self.index)
-        ret = self.backend.exec(cmd)
+        ret = self.backend.gx.send(cmd)
         return -1 if ret is None else command.module(ret)
 
     def get_current(self):
         cmd = command.get_current(self.index & 0x3)
-        ret = self.backend.exec(cmd)
+        ret = self.backend.gx.send(cmd)
         return -1 if ret is None else command.payload(ret)
+
+    def get_period(self, divisor = 0):
+        cmd = command.period_read(self.index, divisor)
+        return hex(0xFFFFF & (self.backend.gx.send(cmd) or -1))
+
+    def get_singles_rate(self, block, divisor = 16):
+        cmd = command.singles_rate_read(self.index, block, divisor)
+        return hex(0xFFFFF & (self.backend.gx.send(cmd) or -1))
+
+    def get_all_singles_rates(self, divisor = 16):
+        return [self.get_singles_rate(i, divisor) for i in range(4)]
+
+    def frontend_reset(self):
+        with self.backend.gx:
+            cmd = command.frontend_rst(self.index)
+            self.backend.gx._spi(cmd)
+
+    def tt_stall_disable(self, disable = True):
+        cmd = command.frontend_tt_stall_disable(
+                self.index, int(disable))
+        return hex(self.backend.gx.send(cmd) or -1)
+
+    def detector_disable(self, disable = True):
+        cmd = command.frontend_det_disable(
+                self.index, int(disable))
+        return hex(self.backend.gx.send(cmd) or -1)

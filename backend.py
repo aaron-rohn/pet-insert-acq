@@ -1,8 +1,4 @@
-import os
-import socket
-import threading
-import queue
-import types
+import os, socket, threading, queue, types, time
 from datetime import datetime
 import command as cmd
 from gigex import Gigex
@@ -13,14 +9,22 @@ data_port = 5555
 class Backend():
 
     def acq(self):
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(0.1)
-        s.connect((self.ip,data_port))
 
         f = open(os.devnull, "wb")
         ui = None
+        s = None
 
         while not self.finished.is_set():
+            if s is None:
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.settimeout(0.1)
+                try:
+                    s.connect((self.ip,data_port))
+                except socket.timeout:
+                    s = None
+                    time.sleep(1)
+                    continue
+
             try:
                 d = s.recv(4096)
             except socket.timeout as e:
@@ -52,25 +56,14 @@ class Backend():
         s.close()
 
     def mon(self, interval = 5.0):
-        date = datetime.now().strftime('%Y%m%d--%H-%M-%S')
-        t_file = open(f'temperature/{self.ip}_{date}_temperature.txt', 'w')
-        c_file = open(f'current/{self.ip}_{date}_current.txt', 'w')
-
         while not self.finished.wait(interval):
             if self.mon_cb is not None:
                 try:
-                    temp, current = self.mon_cb()
-
-                    t_file.write(str(datetime.now()) + ',')
-                    t_file.write(','.join([str(t) for t in temp]) + '\n')
-
-                    c_file.write(str(datetime.now()) + ',')
-                    c_file.write(','.join([str(c) for c in current]) + '\n')
-
-                except RuntimeError: break
-
-        t_file.close()
-        c_file.close()
+                    self.mon_cb()
+                except RuntimeError:
+                    break
+                except socket.timeout:
+                    pass
 
     def __init__(self, ip):
         self.ip = ip
@@ -102,41 +95,36 @@ class Backend():
     def __getattr__(self, attr):
         return lambda *args, **kwds: [getattr(f, attr)(*args, **kwds) for f in self.frontend]
 
-    def exec(self, cmd_int):
-        with self.gx:
-            return self.gx.spi_query(cmd_int)
-
     def reset(self):
         with self.gx:
-            self.gx.spi(cmd.rst())
+            self.gx._spi(cmd.rst())
 
     def flush(self):
-        with self.gx:
-            self.gx.flush()
+        self.gx.flush()
 
     def set_network_led(self, clear = False):
-        self.exec(cmd.backend_network_set(clear))
+        self.gx.send(cmd.backend_network_set(clear))
 
     def get_status(self):
         c = cmd.backend_status(10)
-        return self.exec(c) == c
+        return self.gx.send(c) == c
 
     def get_rx_status(self):
-        resp = self.exec(cmd.gpio_rd_rx_err())
+        resp = self.gx.send(cmd.gpio_rd_rx_err())
         if resp is None:
             return [True]*4 # True indicates error
         else:
             return cmd.mask_to_bool(cmd.payload(resp) & 0xF)
 
     def get_power(self):
-        resp = self.exec(cmd.set_power(False, [False]*4))
+        resp = self.gx.send(cmd.set_power(False, [False]*4))
         return None if resp is None else cmd.mask_to_bool(cmd.payload(resp))
 
     def set_power(self, state = [False]*4):
-        resp = self.exec(cmd.set_power(True, state))
+        resp = self.gx.send(cmd.set_power(True, state))
         return None if resp is None else cmd.mask_to_bool(cmd.payload(resp))
 
     def get_current(self):
-        resp = [self.exec(cmd.get_current(m)) for m in range(4)]
+        resp = [self.gx.send(cmd.get_current(m)) for m in range(4)]
         return [-1 if resp is None else cmd.payload(m) for m in resp]
 

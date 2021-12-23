@@ -8,13 +8,20 @@ def bool_to_mask(bits):
     return value
 
 RST             = 0
+
 DAC_WRITE       = 1
 ADC_READ        = 2
 MODULE_ID       = 3
+
 SET_POWER       = 4
 GET_CURRENT     = 5
 GPIO            = 6
 NOP             = 7
+
+DAC_READ        = 8
+PERIOD_READ     = 9
+SGL_RATE_READ   = 0xA
+GPIO_FRONEND    = 0xB
 
 CMD_EMPTY = 0xF0000000
 
@@ -95,11 +102,51 @@ def backend_status(val = 0):
 def dac_write(module, channel, value):
     channel &= 0xF
     value &= 0xFFF
-    return build(module, DAC_WRITE, (0x3 << 16) | (channel << 12) | value)
+    pld = (0x3 << 16) | (channel << 12) | value
+    return build(module, DAC_WRITE, pld)
+
+def dac_read(module, channel):
+    return build(module, DAC_READ, (channel & 0xF) << 12)
 
 def adc_read(module, channel):
     channel &= 0xF
     return build(module, ADC_READ, (channel << 16))
 
-def module_id(m):
-    return build(m, MODULE_ID, 0)
+def module_id(module):
+    return build(module, MODULE_ID, 0)
+
+def period_read(module, divisor = 0):
+    # divisor indicates a number of bits to right shift out before returning
+    return build(module, PERIOD_READ, divisor & 0xFF)
+
+def singles_rate_read(module, block, divisor = 16):
+    pld = ((block & 0x3) << 8) | (divisor & 0xFF)
+    return build(module, SGL_RATE_READ, pld)
+
+def gpio_frontend(module, write, offset, mask, value):
+    return build(module, GPIO_FRONEND,
+            (((write  & 0x03) << 18) |
+             ((offset & 0xFF) <<  8) |
+             ((mask   & 0x0F) <<  4) |
+             ((value  & 0x0F) <<  0)))
+
+def frontend_rst(module):
+    return gpio_frontend(module,
+            write  = 1,
+            offset = 4,
+            mask   = 1,
+            value  = 1)
+
+def frontend_tt_stall_disable(module, disable = 1):
+    return gpio_frontend(module,
+            write  = 1,
+            offset = 2,
+            mask   = 1,
+            value  = disable)
+
+def frontend_det_disable(module, disable = 1):
+    return gpio_frontend(module,
+            write  = 1,
+            offset = 3,
+            mask   = 1,
+            value  = disable)

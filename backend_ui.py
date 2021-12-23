@@ -10,17 +10,9 @@ class BackendUI():
         return getattr(self.backend, attr)
 
     def update_ui_elements(self):
-        temps = []
-        currents = []
-
         for f in self.frontend:
-            t = f.get_temp()
-            c = f.get_current()
-
-            temps += t
-            currents += [c]
-
-        return temps, currents
+            f.get_temp()
+            f.get_current()
 
     def update_output_dir(self):
         try:

@@ -66,6 +66,7 @@ class SystemUI():
         return states_out
 
     def power_toggle_cb(self, turn_on = False):
+        """
         popup = tk.Toplevel(self.root)
         popup.title('Power on' if turn_on else 'Power off')
         popup.attributes('-type', 'dialog')
@@ -86,15 +87,19 @@ class SystemUI():
             time.sleep(1)
 
         popup.destroy()
+        """
 
+        self.sys.set_power([[turn_on]*4]*4)
         self.get_power()
         self.get_status()
 
     def bias_toggle_cb(self, turn_on = False):
         if turn_on:
-            self.sys.set_bias(29.5)
+            ret = self.sys.set_bias(29.5)
         else:
-            self.sys.set_bias(0.0)
+            ret = self.sys.set_bias(0.0)
+
+        print(ret)
 
     def __init__(self, system_instance):
         self.root = tk.Tk()
@@ -124,7 +129,28 @@ class SystemUI():
         self.current.pack(**pack_args)
         self.temps.pack(**pack_args)
 
-        self.root.bind('<Escape>', lambda *args: self.root.quit())
+        self.ferst = tk.Button(self.root, text = "Frontend reset", command = lambda: print(self.sys.frontend_reset()))
+        self.ferst.pack(**pack_args)
+
+        self.getbias = tk.Button(self.root, text = "Get bias", command = lambda: print(self.sys.get_bias()))
+        self.getbias.pack(**pack_args)
+
+        self.getthresh = tk.Button(self.root, text = "Get thresh", command = lambda: print(self.sys.get_thresh()))
+        self.getthresh.pack(**pack_args)
+
+        self.getper = tk.Button(self.root, text = "Get period", command = lambda: print(self.sys.get_period()))
+        self.getper.pack(**pack_args)
+
+        self.getsr = tk.Button(self.root, text = "Get singles rate", command = lambda: print(self.sys.get_all_singles_rates(0)))
+        self.getsr.pack(**pack_args)
+
+        self.ttstall = ToggleButton(self.root, "TT Stall ON", "TT Stall OFF", lambda s: print(self.sys.tt_stall_disable(s)))
+        self.ttstall.pack(**pack_args)
+
+        self.detoff = ToggleButton(self.root, "Detector ON", "Detector OFF", lambda s: print(self.sys.detector_disable(s)))
+        self.detoff.pack(**pack_args)
+
+        #self.root.bind('<Escape>', lambda *args: self.root.quit())
 
 if __name__ == "__main__":
     sys = System()
