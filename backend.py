@@ -1,130 +1,54 @@
-import os, socket, threading, queue, types, time
-from datetime import datetime
 import command as cmd
-from gigex import Gigex
+from gigex import Gigex, ignore_network_errors
 from frontend import Frontend
-
-data_port = 5555
 
 class Backend():
 
-    def acq(self):
-
-        f = open(os.devnull, "wb")
-        ui = None
-        s = None
-
-        while not self.finished.is_set():
-            if s is None:
-                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                s.settimeout(0.1)
-                try:
-                    s.connect((self.ip,data_port))
-                except socket.timeout:
-                    s = None
-                    time.sleep(1)
-                    continue
-
-            try:
-                d = s.recv(4096)
-            except socket.timeout as e:
-                d = b''
-
-            f.write(d)
-
-            if ui is not None:
-                try:
-                    ui.delete(1.0, 'end')
-                    ui.insert('end', str(d) + "\n")
-                except RuntimeError: break
-
-            if self.update_queue.is_set():
-                self.update_queue.clear()
-
-                if not self.file_queue.empty():
-                    f.close()
-                    try:
-                        f = open(self.file_queue.get(), 'wb')
-                    except Exception as e:
-                        print("Error opening data output file: {}".format(str(e)))
-                        f = open(os.devnull, 'wb')
-
-                if not self.ui_queue.empty():
-                    ui = self.ui_queue.get()
-
-        f.close()
-        s.close()
-
-    def mon(self, interval = 5.0):
-        while not self.finished.wait(interval):
-            if self.mon_cb is not None:
-                try:
-                    self.mon_cb()
-                except RuntimeError:
-                    break
-                except socket.timeout:
-                    pass
-
-    def __init__(self, ip):
-        self.ip = ip
-        self.gx = Gigex(self.ip)
-        self.acq_thread = None
-        self.mon_thread = None
-        self.finished = threading.Event()
-        self.update_queue = threading.Event()
-        self.file_queue = queue.Queue()
-        self.ui_queue = queue.Queue()
-        self.mon_cb = None
-        self.frontend = [Frontend(self, i) for i in range(4)]
-
-    def __enter__(self):
-        self.acq_thread = threading.Thread(target = self.acq, daemon = True)
-        self.mon_thread = threading.Thread(target = self.mon, daemon = True)
-        self.finished.clear()
-        self.acq_thread.start()
-        self.mon_thread.start()
-        self.set_network_led(clear = False)
-        return self
-
-    def __exit__(self, *context):
-        self.set_network_led(clear = True)
-        self.finished.set()
-        self.acq_thread.join()
-        self.mon_thread.join()
+    data_port = 5555
 
     def __getattr__(self, attr):
         return lambda *args, **kwds: [getattr(f, attr)(*args, **kwds) for f in self.frontend]
 
-    def reset(self):
+    def __init__(self, ip):
+        self.ip = ip
+        self.gx = Gigex(self.ip)
+        self.frontend = [Frontend(self, i) for i in range(4)]
+
+    @ignore_network_errors(None)
+    def backend_reset(self):
         with self.gx:
             self.gx._spi(cmd.rst())
 
+    @ignore_network_errors(None)
     def flush(self):
         self.gx.flush()
 
+    @ignore_network_errors(None)
     def set_network_led(self, clear = False):
         self.gx.send(cmd.backend_network_set(clear))
 
+    @ignore_network_errors(False)
     def get_status(self):
         c = cmd.backend_status(10)
         return self.gx.send(c) == c
 
+    @ignore_network_errors([True]*4)
     def get_rx_status(self):
         resp = self.gx.send(cmd.gpio_rd_rx_err())
-        if resp is None:
-            return [True]*4 # True indicates error
-        else:
-            return cmd.mask_to_bool(cmd.payload(resp) & 0xF)
+        return cmd.mask_to_bool(cmd.payload(resp) & 0xF)
 
+    @ignore_network_errors([True]*4)
     def get_power(self):
         resp = self.gx.send(cmd.set_power(False, [False]*4))
-        return None if resp is None else cmd.mask_to_bool(cmd.payload(resp))
+        return cmd.mask_to_bool(cmd.payload(resp))
 
+    @ignore_network_errors([True]*4)
     def set_power(self, state = [False]*4):
         resp = self.gx.send(cmd.set_power(True, state))
-        return None if resp is None else cmd.mask_to_bool(cmd.payload(resp))
+        return cmd.mask_to_bool(cmd.payload(resp))
 
+    @ignore_network_errors([-1]*4)
     def get_current(self):
         resp = [self.gx.send(cmd.get_current(m)) for m in range(4)]
-        return [-1 if resp is None else cmd.payload(m) for m in resp]
+        return [cmd.payload(m) for m in resp]
 

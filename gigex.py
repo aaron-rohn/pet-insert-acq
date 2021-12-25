@@ -3,6 +3,22 @@ import socket
 import threading
 import command
 
+class GigexError(RuntimeError):
+    pass
+
+NetworkErrors = (TimeoutError, ConnectionRefusedError, OSError, GigexError)
+
+def ignore_network_errors(default_return):
+    def wrap(unsafe):
+        def safe_fun(*args, **kwds):
+            try:
+                return unsafe(*args, **kwds)
+            except NetworkErrors:
+                print(f'{unsafe.__name__} failed')
+                return default_return
+        return safe_fun
+    return wrap
+
 class Gigex():
     sys_port = 0x5001
 
@@ -19,7 +35,7 @@ class Gigex():
         try:
             self.sys.connect((self.ip, Gigex.sys_port))
             return self
-        except socket.timeout as e:
+        except NetworkErrors as e:
             self.__exit__()
             raise e
 
@@ -47,7 +63,7 @@ class Gigex():
         with self:
             try:
                 self.sys.recv(1024*10)
-            except socket.timeout:
+            except NetworkErrors:
                 pass
 
     def send(self, cmd):
@@ -63,6 +79,8 @@ class Gigex():
                     # Finish when a valid response is recevied
                     if command.is_command(value[0]):
                         return value[0]
+
+        raise GigexError
 
     def reboot(self):
         with self:

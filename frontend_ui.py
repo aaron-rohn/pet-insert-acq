@@ -19,36 +19,43 @@ def scale_value(value, minrange, maxrange):
     return '#%02X%02X%02X' % (r, g, 0)
 
 class FrontendUI():
-    def __init__(self, frontend_instance, parent_frame):
+    def __getattr__(self, attr):
+        return getattr(self.frontend, attr)
+
+    def __init__(self, frontend_instance, root):
         self.frontend = frontend_instance
-        self.frame = parent_frame
 
-        self.status = tk.Canvas(self.frame, bg = 'red', height = 10, width = 10)
-        self.current = tk.Canvas(self.frame, bg = 'red', height = 10, width = 10)
-        self.temp_status = [tk.Canvas(self.frame, bg = 'red', height = 10, width = 10) for _ in range(8)]
+        self.status_label  = tk.Label(root, text = "Status:")
+        self.current_label = tk.Label(root, text = "Current:")
+        self.temps_label   = tk.Label(root, text = "Temp:")
 
-        tk.Label(self.frame, text = "Status:").pack(side = tk.LEFT, padx = 10)
-        self.status.pack(side = tk.LEFT)
+        self.status_ind  = tk.Canvas(root, bg = 'red', height = 10, width = 10)
+        self.current_ind = tk.Canvas(root, bg = 'red', height = 10, width = 10)
+        self.temps_ind  = [tk.Canvas(root, bg = 'red', height = 10, width = 10) for _ in range(8)]
 
-        tk.Label(self.frame, text = "Current:").pack(side = tk.LEFT, padx = 10)
-        self.current.pack(side = tk.LEFT)
+    def pack(self):
+        self.status_label.pack(side = tk.LEFT, padx = 10)
+        self.status_ind.pack(side = tk.LEFT)
 
-        tk.Label(self.frame, text = "Temp:").pack(side = tk.LEFT, padx = 10)
-        [ts.pack(side = tk.LEFT, padx = 10) for ts in self.temp_status]
+        self.current_label.pack(side = tk.LEFT, padx = 10)
+        self.current_ind.pack(side = tk.LEFT)
+
+        self.temps_label.pack(side = tk.LEFT, padx = 10)
+        [ts.pack(side = tk.LEFT, padx = 5, expand = True) for ts in self.temps_ind]
 
     def get_temp(self):
-        temps = self.frontend.get_temp()
+        temp_vals = self.frontend.get_temp()
 
-        for t,ts in zip(temps, self.temp_status):
+        for t,ts in zip(temp_vals, self.temps_ind):
             col = scale_value(t, 20.0, 30.0)
             ts.config(bg = col)
 
-        return temps
+        return temp_vals 
 
     def get_current(self):
         c = self.frontend.get_current()
         col = scale_value(c, 600, 700)
-        self.current.config(bg = col)
+        self.current_ind.config(bg = col)
         return c
 
     def get_id(self):

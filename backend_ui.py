@@ -1,64 +1,136 @@
-import os
-import contextlib
+import os, socket, time, queue, threading
 import tkinter as tk
 from tkinter import filedialog
 from frontend_ui import FrontendUI
 
+class Acq:
+    def __init__(self, ip, port, stop):
+        self.ip = ip
+        self.port = port
+        self.stop = stop
+
+    def __enter__(self):
+        try:
+            self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.s.settimeout(0.1)
+            self.s.connect((self.ip,self.port))
+        except (TimeoutError, ConnectionError):
+            # socket should connect to gigex on first try
+            # system might not be turned on
+            print("Acquisiton failed to connect to target")
+            self.s = None
+
+        return self
+
+    def __exit__(self, *context):
+        self.s.close()
+
+    def __iter__(self):
+        if self.s is None:
+            return
+
+        while not self.stop.is_set():
+            try:
+                yield self.s.recv(4096)
+            except (TimeoutError, ConnectionError):
+                yield b''
+
+def acq_ui(ip, port, stop, display):
+    # acquire data and send it to the UI
+    with Acq(ip, port, stop) as acq_inst:
+        for d in acq_inst:
+            try:
+                display.delete(1.0, 'end')
+                display.insert('end', str(d) + "\n")
+            except RuntimeError:
+                pass
+
+def acq_file(ip, port, stop, fname):
+    # acquire data and save it to a file
+    with Acq(ip, port, stop) as acq_inst:
+        with open(fname, 'wb') as f:
+            for d in acq_inst:
+                f.write(d)
+
 class BackendUI():
+
+    def acq(self):
+        acq_stop = threading.Event()
+        args = [self.backend.ip, self.backend.data_port, acq_stop]
+
+        # spawn an acq thread to start
+        acq_thread = threading.Thread(target = acq_ui, args = args + [self.data], daemon = True)
+        acq_thread.start()
+
+        # monitor the UI thread and spawn acq_ui and acq_file as necessary
+        self.cv.acquire()
+        while self.cv.wait():
+            if self.exit.is_set():
+                self.cv.release()
+                break
+
+            # should be None to display to UI, or a file name
+            fname = self.dest.get_nowait()
+
+            # join the old acq thread
+            acq_stop.set()
+            acq_thread.join()
+            acq_stop.clear()
+
+            # determine if the new thread directs to UI or a file
+            if fname is None:
+                acq_target = acq_ui
+                a = args + [self.data]
+            else:
+                acq_target = acq_file
+                a = args + [fname]
+
+            # start the new thread
+            acq_thread = threading.Thread(target = acq_target, args = a, daemon = True)
+            acq_thread.start()
+
+        # join the acq thread when finishing
+        acq_stop.set()
+        acq_thread.join()
 
     def __getattr__(self, attr):
         return getattr(self.backend, attr)
 
-    def update_ui_elements(self):
-        for f in self.frontend:
-            f.get_temp()
-            f.get_current()
+    def __enter__(self):
+        self.exit = threading.Event()
+        self.cv = threading.Condition()
+        self.dest = queue.Queue()
 
-    def update_output_dir(self):
-        try:
-            dirname = filedialog.askdirectory()
-            if not dirname: raise Exception('No file selected')
-            fname = dirname + '/' + self.ip + '.SGL'
-            self.backend.file_queue.put(fname)
-            self.backend.ui_queue.put(None)
-            self.file_indicator.config(text = fname)
-        except Exception as e:
-            self.file_indicator.config(text = str(e))
-            self.backend.file_queue.put(os.devnull)
-            self.backend.ui_queue.put(self.data)
+        self.acq_management_thread = threading.Thread(target = self.acq, daemon = True)
+        self.acq_management_thread.start()
+        return self
 
-        self.backend.update_queue.set()
+    def __exit__(self, *context):
+        self.exit.set()
+        with self.cv:
+            self.cv.notify()
 
-    def __init__(self, backend_instance, parent_frame):
+        self.acq_management_thread.join()
+
+    def acq_start(self, destination):
+        self.dest.put(destination)
+        with self.cv:
+            self.cv.notify()
+
+    def acq_end(self):
+        self.dest.put(None)
+        self.cv.acquire()
+        self.cv.notify()
+        self.cv.release()
+
+    def __init__(self, backend_instance, status_frame, acq_frame):
         self.backend = backend_instance
-        self.frame = tk.Frame(parent_frame, relief = tk.GROOVE, borderwidth = 1)
-        self.frame.pack(fill = tk.X, expand = True, padx = 10, pady = 10)
+        self.status_frame = tk.Frame(status_frame)
 
         # Frame with Label, status, and data output text field
-        self.common = tk.Frame(self.frame)
-        self.label  = tk.Label(self.common, text = f'Data: {self.backend.ip}')
-        self.rst    = tk.Button(self.common, text = "Reset", command = self.backend.reset)
-        self.status = tk.Canvas(self.common, bg = 'red', height = 10, width = 10)
-        self.data   = tk.Text(self.common, height = 2, takefocus = False)
-
-        self.common.pack(fill = tk.X, expand = True)
-        self.label.pack(side = tk.LEFT, padx = 5)
-        self.rst.pack(side = tk.LEFT, padx = 5)
-        self.status.pack(side = tk.LEFT, padx = 5)
-        self.data.pack(side = tk.LEFT, padx = 5, pady = 10, expand = True, fill = tk.X)
-
-        # Now that an output field exists for the backend, update the write function
-        self.backend.ui_queue.put(self.data)
-        self.backend.update_queue.set()
-
-        # Frame with Directory select button, indicator of current directory
-        self.file_output    = tk.Frame(self.frame)
-        self.file_select    = tk.Button(self.file_output, text = "Directory", command = self.update_output_dir)
-        self.file_indicator = tk.Label(self.file_output, bg = 'white', text = '', anchor = 'w', relief = tk.SUNKEN, borderwidth = 1, height = 2) 
-
-        self.file_output.pack(fill = tk.X, expand = True)
-        self.file_select.pack(side = tk.LEFT, padx = 10, pady = 10)
-        self.file_indicator.pack(side = tk.LEFT, fill = tk.X, expand = True, padx = 10, pady = 10)
+        self.common = tk.Frame(self.status_frame)
+        self.status_label = tk.Label(self.common, text = 'Backend Status:')
+        self.status_ind   = tk.Canvas(self.common, bg = 'red', height = 10, width = 10)
 
         # Populate items for the four frontend instances
 
@@ -69,20 +141,27 @@ class BackendUI():
 
         for i in range(4):
             self.m_pow_var.append(tk.IntVar())
-            self.m_frame.append(tk.Frame(self.frame))
+            self.m_frame.append(tk.Frame(self.status_frame))
 
-            cb = tk.Checkbutton(self.m_frame[-1],
-                                text = str(i).rjust(2),
-                                variable = self.m_pow_var[-1],
-                                font = 'TkFixedFont')
+            cb = tk.Checkbutton(self.m_frame[-1], text = str(i).rjust(2),
+                                variable = self.m_pow_var[-1], font = 'TkFixedFont')
 
             self.m_pow.append(cb)
-            self.m_frame[-1].pack(fill = tk.X, expand = True)
-            self.m_pow[-1].pack(side = tk.LEFT)
 
             fe = self.backend.frontend[i]
             self.frontend.append(FrontendUI(fe, self.m_frame[-1]))
 
-        # allow the backend instance to update the frontend temperature indicators
-        self.backend.__setattr__('mon_cb', self.update_ui_elements)
+        # Acq elements
+        self.data = tk.Text(acq_frame, height = 4, takefocus = False)
+
+    def pack(self):
+        self.common.pack(padx = 10, pady = 10)
+        self.status_label.pack(side = tk.LEFT, padx = 5, pady = 10)
+        self.status_ind.pack(side = tk.LEFT, padx = 5, pady = 10)
+
+        for fr, cb in zip(self.m_frame, self.m_pow):
+            fr.pack(fill = tk.BOTH, expand = True)
+            cb.pack(side = tk.LEFT)
+
+        self.data.pack(fill = tk.X, side = tk.TOP, padx = 10, pady = 10, expand = True)
 
