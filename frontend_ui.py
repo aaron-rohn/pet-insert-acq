@@ -43,8 +43,8 @@ class FrontendUI():
         self.temps_label.pack(side = tk.LEFT, padx = 10)
         [ts.pack(side = tk.LEFT, padx = 5, expand = True) for ts in self.temps_ind]
 
-    def get_temp(self):
-        temp_vals = self.frontend.get_temp()
+    def get_all_temps(self):
+        temp_vals = self.frontend.get_all_temps()
 
         for t,ts in zip(temp_vals, self.temps_ind):
             col = scale_value(t, 20.0, 30.0)
@@ -57,6 +57,3 @@ class FrontendUI():
         col = scale_value(c, 600, 700)
         self.current_ind.config(bg = col)
         return c
-
-    def get_id(self):
-        self.frontend.get_physical_idx()

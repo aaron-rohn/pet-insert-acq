@@ -1,10 +1,8 @@
-import os, shutil, time, socket, glob
+import os, shutil, time, glob, logging
 import numpy as np
 import tkinter as tk
 from tkinter.ttk import Separator, Notebook
 from contextlib import ExitStack
-
-from gigex import NetworkErrors
 from frontend import BIAS_ON, BIAS_OFF
 from system import System
 from sync_ui import SyncUI
@@ -12,22 +10,44 @@ from backend_ui import BackendUI
 from toggle_button import ToggleButton
 
 class SystemUI():
+    def statusbar_status_handler(self, status):
+        self.statusbar_label.config(text = 'Status: {}'.format('OK' if status else 'ERROR'))
+
+    def statusbar_power_handler(self, power):
+        self.statusbar_power_label.config(text = 'Power: {}'.format('ON' if power else 'OFF'))
+
+    def statusbar_bias_handler(self, bias):
+        self.statusbar_bias_label.config(text = 'Bias: {}'.format('ON' if bias else 'OFF'))
+
+    def statusbar_acq_handler(self, running):
+        self.statusbar_acq_label.config(text = 'Acq: {}'.format('RUN' if running else 'STOP'))
+
+    def cmd_output_print(self, value):
+        self.cmd_output.delete(1.0, 'end')
+        self.cmd_output.insert('end', str(value) + "\n")
+
     def get_status(self):
         self.sys.flush()
+        sys_status = True
 
         sync_status = self.sys.sync.get_status()
+        sys_status &= sync_status
         self.sync.status_ind.config(bg = 'green' if sync_status else 'red')
 
         # Directly check the status of each backend
         be_status = self.sys.get_status()
         be_status = zip(self.backend, be_status)
+        sys_status &= all(be_status)
         [b.status_ind.config(bg = 'green' if s else 'red') for b,s in be_status]
 
         # Check the RX status for each port on each backend to infer the frontend state
         sys_rx = self.sys.get_rx_status()
         for be, be_rx in zip(self.backend, sys_rx):
             for fe, err in zip(be.frontend, be_rx):
+                sys_status &= err
                 fe.status_ind.config(bg = 'red' if err else 'green')
+
+        self.statusbar_status_handler(sys_status)
 
     def enumerate(self):
         sys_idx = self.sys.get_physical_idx()
@@ -62,10 +82,12 @@ class SystemUI():
         self.sys.set_power([[turn_on]*4]*4)
         self.get_power()
         self.get_status()
+        self.statusbar_power_handler(turn_on)
 
     def toggle_bias(self, turn_on = False):
         val = BIAS_ON if turn_on else BIAS_OFF
         self.sys.set_bias(val)
+        self.statusbar_bias_handler(turn_on)
 
     def start_acq(self):
         self.sys.set_bias(BIAS_OFF)
@@ -80,7 +102,7 @@ class SystemUI():
                 raise ValueError('IP address must use 1 or 2 in the third field')
 
             fname = os.path.join(self.data_dirs[idx], be.ip + '.SGL')
-            be.acq_start(fname)
+            be.acq_dest.put(fname)
 
         self.acq_start_button.config(state = tk.DISABLED)
         self.acq_stop_button.config(state = tk.NORMAL)
@@ -89,14 +111,18 @@ class SystemUI():
         time.sleep(1)
         self.sys.set_bias(BIAS_ON)
 
+        self.statusbar_acq_handler(True)
+
     def stop_acq(self):
         self.sys.set_bias(BIAS_OFF)
 
         for be in self.backend:
-            be.acq_end()
+            be.acq_dest.put(None)
 
         self.acq_start_button.config(state = tk.NORMAL)
         self.acq_stop_button.config(state = tk.DISABLED)
+
+        self.statusbar_acq_handler(False)
 
         data_dir = tk.filedialog.askdirectory(
                 title = "Directory to store data",
@@ -114,10 +140,11 @@ class SystemUI():
             for f in sgl_files:
                 shutil.copy(f, data_dir)
                 os.remove(f)
-        except PermissionError:
-            pass
+        except PermissionError as e:
+            logging.warning('Failed to move acquition files', exc_info = e)
 
     def __enter__(self):
+        logging.info("SystemUI enter context")
         self.sync.set_network_led(clear = False)
         with ExitStack() as stack:
             [stack.enter_context(b) for b in self.backend]
@@ -126,6 +153,7 @@ class SystemUI():
         return self
     
     def __exit__(self, *context):
+        logging.info("SystemUI exit context")
         self.sync.set_network_led(clear = True)
         self._stack.__exit__(self, *context)
 
@@ -136,11 +164,8 @@ class SystemUI():
     def __init__(self, system_instance):
         self.root = tk.Tk()
         self.root.bind('<Escape>', self.quit)
-
         self.data_dirs = ['/opt/acq1', '/opt/acq2']
-
         self.sys = system_instance
-
         self._stack = None
 
         main_pack_args = {'fill': tk.X, 'side': tk.TOP, 'expand': True, 'padx': 10, 'pady': 5}
@@ -159,6 +184,26 @@ class SystemUI():
         self.pages.add(self.acq_frame, text = "Acquisition")
 
         self.pages.pack(fill = tk.BOTH, expand = True)
+
+        # Status bar
+
+        self.statusbar_frame = tk.Frame(self.root, relief = tk.SUNKEN)
+        self.statusbar_frame.pack(side = tk.BOTTOM, fill = tk.X)
+
+        self.statusbar_label = tk.Label(self.statusbar_frame)
+        self.statusbar_power_label = tk.Label(self.statusbar_frame)
+        self.statusbar_bias_label = tk.Label(self.statusbar_frame)
+        self.statusbar_acq_label = tk.Label(self.statusbar_frame)
+
+        self.statusbar_label.pack(side = tk.LEFT, padx = 5)
+        self.statusbar_power_label.pack(side = tk.LEFT, padx = 5)
+        self.statusbar_bias_label.pack(side = tk.LEFT, padx = 5)
+        self.statusbar_acq_label.pack(side = tk.LEFT, padx = 5)
+
+        self.statusbar_status_handler(False)
+        self.statusbar_power_handler(False)
+        self.statusbar_bias_handler(False)
+        self.statusbar_acq_handler(False)
 
         # Acquisition page
 
@@ -194,7 +239,7 @@ class SystemUI():
 
             self.backend_tabs.add(bnew.status_frame, text = bnew.ip)
 
-        # Main operation buttons
+        # Status page - Main operation buttons
 
         self.refresh = tk.Button(self.status_frame, text = "Refresh", command = self.get_status)
         self.enum = tk.Button(self.status_frame, text = "Enumerate", command = self.enumerate)
@@ -206,13 +251,13 @@ class SystemUI():
         self.pwr_tog.pack(**main_pack_args)
         self.bias_tog.pack(**main_pack_args)
 
-        # Secondary operation buttons
+        # Command page - Secondary operation buttons
 
         self.backend_rst = tk.Button(self.command_frame, text = "Backend reset",
-                command = lambda: print(self.sys.backend_reset()))
+                command = lambda: self.cmd_output_print(self.sys.backend_reset()))
 
         self.frontend_rst = tk.Button(self.command_frame, text = "Frontend reset",
-                command = lambda: print(self.sys.frontend_reset()))
+                command = lambda: self.cmd_output_print(self.sys.frontend_reset()))
 
         self.power_rd = tk.Button(self.command_frame, text = "Read power state",
                 command = self.get_power)
@@ -221,28 +266,28 @@ class SystemUI():
                 command = self.set_power)
 
         self.current = tk.Button(self.command_frame, text = "Read current",
-                command = lambda: print(self.sys.get_current()))
+                command = lambda: self.cmd_output_print(self.sys.get_current()))
 
         self.temps = tk.Button(self.command_frame, text = "Read temperature",
-                command = lambda: print(self.sys.get_temp()))
+                command = lambda: self.cmd_output_print(self.sys.get_all_temps()))
 
-        self.bias_rd = tk.Button(self.command_frame, text = "Get bias",
-                command = lambda: print(self.sys.get_bias()))
+        self.bias_rd = tk.Button(self.command_frame, text = "Read bias",
+                command = lambda: self.cmd_output_print(self.sys.get_bias()))
 
-        self.thresh_rd = tk.Button(self.command_frame, text = "Get thresh",
-                command = lambda: print(self.sys.get_thresh()))
+        self.thresh_rd = tk.Button(self.command_frame, text = "Read thresh",
+                command = lambda: self.cmd_output_print(self.sys.get_thresh()))
 
-        self.period_rd = tk.Button(self.command_frame, text = "Get period", 
-                command = lambda: print(self.sys.get_period()))
+        self.period_rd = tk.Button(self.command_frame, text = "Read period", 
+                command = lambda: self.cmd_output_print(self.sys.get_period()))
 
-        self.sgl_rate_rd = tk.Button(self.command_frame, text = "Get singles rate",
-                command = lambda: print(self.sys.get_all_singles_rates()))
+        self.sgl_rate_rd = tk.Button(self.command_frame, text = "Read singles rate",
+                command = lambda: self.cmd_output_print(self.sys.get_all_singles_rates()))
 
         self.tt_stall = ToggleButton(self.command_frame, "TT Stall ON", "TT Stall OFF",
-                lambda s: print(self.sys.tt_stall_disable(s)))
+                lambda s: self.cmd_output_print(self.sys.tt_stall_disable(s)))
 
         self.det_disable = ToggleButton(self.command_frame, "Detector ON", "Detector OFF",
-                lambda s: print(self.sys.detector_disable(s)))
+                lambda s: self.cmd_output_print(self.sys.detector_disable(s)))
 
         self.backend_rst.pack(**button_pack_args)
         self.frontend_rst.pack(**button_pack_args)
@@ -250,6 +295,9 @@ class SystemUI():
         self.power_wr.pack(**button_pack_args)
         self.current.pack(**button_pack_args)
         self.temps.pack(**button_pack_args)
+
+        Separator(self.command_frame).pack(fill = tk.X, padx = 60, pady = 30)
+
         self.bias_rd.pack(**button_pack_args)
         self.thresh_rd.pack(**button_pack_args)
         self.period_rd.pack(**button_pack_args)
@@ -257,7 +305,13 @@ class SystemUI():
         self.tt_stall.pack(**button_pack_args)
         self.det_disable.pack(**button_pack_args)
 
+        self.cmd_output = tk.Text(self.command_frame, height = 10, takefocus = False)
+        self.cmd_output.pack(**button_pack_args)
+
+        self.get_status()
+
 if __name__ == "__main__":
+    logging.basicConfig(level = logging.WARNING)
     sys = System()
     with SystemUI(sys) as app:
         app.root.mainloop()

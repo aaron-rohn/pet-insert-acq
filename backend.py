@@ -1,10 +1,47 @@
+import socket, logging
 import command as cmd
 from gigex import Gigex, ignore_network_errors
 from frontend import Frontend
 
-class Backend():
+data_port = 5555
 
-    data_port = 5555
+class BackendAcq:
+
+    def __init__(self, ip, stop):
+        self.ip = ip
+        self.stop = stop
+
+    def __enter__(self):
+        logging.info(f'{self.ip}:{data_port} connect for acquisiton')
+        self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.s.settimeout(0.1)
+
+        try:
+            self.s.connect((self.ip, data_port))
+        except (TimeoutError, ConnectionError):
+            logging.warning(f'{self.ip}: failed to connect for acquisition')
+            self.s = None
+
+        return self
+
+    def __exit__(self, *context):
+        if self.s is not None:
+            logging.info(f'{self.ip}: closing connection for acquisition')
+            self.s.close()
+
+    def __iter__(self):
+        if self.s is None:
+            return
+        
+        logging.info(f'{self.ip}: starting data acquisition')
+
+        while not self.stop.is_set():
+            try:
+                yield self.s.recv(4096)
+            except TimeoutError:
+                yield b''
+
+class Backend():
 
     def __getattr__(self, attr):
         return lambda *args, **kwds: [getattr(f, attr)(*args, **kwds) for f in self.frontend]
@@ -16,8 +53,7 @@ class Backend():
 
     @ignore_network_errors(None)
     def backend_reset(self):
-        with self.gx:
-            self.gx._spi(cmd.rst())
+        self.gx.spi(cmd.rst())
 
     @ignore_network_errors(None)
     def flush(self):

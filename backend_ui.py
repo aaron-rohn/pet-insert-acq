@@ -1,43 +1,12 @@
-import os, socket, time, queue, threading
+import os, socket, time, queue, threading, logging
 import tkinter as tk
 from tkinter import filedialog
 from frontend_ui import FrontendUI
+from backend import BackendAcq
 
-class Acq:
-    def __init__(self, ip, port, stop):
-        self.ip = ip
-        self.port = port
-        self.stop = stop
-
-    def __enter__(self):
-        try:
-            self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.s.settimeout(0.1)
-            self.s.connect((self.ip,self.port))
-        except (TimeoutError, ConnectionError):
-            # socket should connect to gigex on first try
-            # system might not be turned on
-            print("Acquisiton failed to connect to target")
-            self.s = None
-
-        return self
-
-    def __exit__(self, *context):
-        self.s.close()
-
-    def __iter__(self):
-        if self.s is None:
-            return
-
-        while not self.stop.is_set():
-            try:
-                yield self.s.recv(4096)
-            except (TimeoutError, ConnectionError):
-                yield b''
-
-def acq_ui(ip, port, stop, display):
+def acq_ui(ip, stop, display):
     # acquire data and send it to the UI
-    with Acq(ip, port, stop) as acq_inst:
+    with BackendAcq(ip, stop) as acq_inst:
         for d in acq_inst:
             try:
                 display.delete(1.0, 'end')
@@ -45,9 +14,9 @@ def acq_ui(ip, port, stop, display):
             except RuntimeError:
                 pass
 
-def acq_file(ip, port, stop, fname):
+def acq_file(ip, stop, fname):
     # acquire data and save it to a file
-    with Acq(ip, port, stop) as acq_inst:
+    with BackendAcq(ip, stop) as acq_inst:
         with open(fname, 'wb') as f:
             for d in acq_inst:
                 f.write(d)
@@ -56,72 +25,68 @@ class BackendUI():
 
     def acq(self):
         acq_stop = threading.Event()
-        args = [self.backend.ip, self.backend.data_port, acq_stop]
+        args = [self.backend.ip, acq_stop]
 
         # spawn an acq thread to start
-        acq_thread = threading.Thread(target = acq_ui, args = args + [self.data], daemon = True)
+        acq_thread = threading.Thread(target = acq_ui, args = args + [self.data])
         acq_thread.start()
 
         # monitor the UI thread and spawn acq_ui and acq_file as necessary
-        self.cv.acquire()
-        while self.cv.wait():
-            if self.exit.is_set():
-                self.cv.release()
-                break
-
+        while True:
             # should be None to display to UI, or a file name
-            fname = self.dest.get_nowait()
+            fname = self.acq_dest.get(block = True)
 
             # join the old acq thread
             acq_stop.set()
             acq_thread.join()
             acq_stop.clear()
 
+            # check if thread should terminate
+            if self.exit.is_set(): break
+
             # determine if the new thread directs to UI or a file
             if fname is None:
-                acq_target = acq_ui
-                a = args + [self.data]
+                acq_thread = threading.Thread(
+                        target = acq_ui, args = args + [self.data])
             else:
-                acq_target = acq_file
-                a = args + [fname]
+                acq_thread = threading.Thread(
+                        target = acq_file, args = args + [fname])
 
             # start the new thread
-            acq_thread = threading.Thread(target = acq_target, args = a, daemon = True)
             acq_thread.start()
 
-        # join the acq thread when finishing
-        acq_stop.set()
-        acq_thread.join()
+    def mon(self):
+        interval = 10.0
+
+        while True:
+            for fe in self.frontend:
+                fe.get_all_temps()
+                fe.get_current()
+
+            if self.exit.wait(interval): break
 
     def __getattr__(self, attr):
         return getattr(self.backend, attr)
 
     def __enter__(self):
         self.exit = threading.Event()
-        self.cv = threading.Condition()
-        self.dest = queue.Queue()
+        self.acq_dest = queue.Queue()
 
-        self.acq_management_thread = threading.Thread(target = self.acq, daemon = True)
+        self.acq_management_thread = threading.Thread(
+                target = self.acq, daemon = False)
         self.acq_management_thread.start()
+
+        self.monitor_thread = threading.Thread(
+                target = self.mon, daemon = True)
+        self.monitor_thread.start()
+
         return self
 
     def __exit__(self, *context):
         self.exit.set()
-        with self.cv:
-            self.cv.notify()
-
+        self.acq_dest.put(None)
         self.acq_management_thread.join()
-
-    def acq_start(self, destination):
-        self.dest.put(destination)
-        with self.cv:
-            self.cv.notify()
-
-    def acq_end(self):
-        self.dest.put(None)
-        self.cv.acquire()
-        self.cv.notify()
-        self.cv.release()
+        self.monitor_thread.join()
 
     def __init__(self, backend_instance, status_frame, acq_frame):
         self.backend = backend_instance
