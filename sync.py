@@ -17,7 +17,6 @@ class Sync():
         resp = self.gx.send(cmd)
         return resp == (command.CMD_EMPTY | 0x1)
 
-
     @ignore_network_errors(False)
     def get_status(self):
         cmd = command.backend_status(10)

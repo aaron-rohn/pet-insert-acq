@@ -1,8 +1,7 @@
-import os, shutil, time, glob, logging, threading
-import numpy as np
+import logging, threading, queue
+import tkinter.filedialog
 import tkinter as tk
 from tkinter.ttk import Separator, Notebook
-from contextlib import ExitStack
 from frontend import BIAS_ON, BIAS_OFF
 from system import System
 from sync_ui import SyncUI
@@ -21,6 +20,9 @@ class PowerPopup(tk.Toplevel):
         self.popup_status.config(text = f'Module: {i}')
 
 class SystemUI():
+
+    # UI only methods
+
     def statusbar_status_handler(self, status):
         self.statusbar_label.config(text = 'Status: {}'.format('OK' if status else 'ERROR'))
 
@@ -37,37 +39,6 @@ class SystemUI():
         self.cmd_output.delete(1.0, 'end')
         self.cmd_output.insert('end', str(value) + "\n")
 
-    def get_status(self):
-        self.sys.flush()
-        sys_status = True
-
-        sync_status = self.sys.sync.get_status()
-        sys_status &= sync_status
-        self.sync.status_ind.config(bg = 'green' if sync_status else 'red')
-
-        # Directly check the status of each backend
-        be_status = self.sys.get_status()
-        sys_status &= all(be_status)
-
-        for b,s in zip(self.backend, be_status):
-            b.status_ind.config(bg = 'green' if s else 'red')
-
-        # Check the RX status for each port on each backend to infer the frontend state
-        pwr = self.get_pwr_vars()
-        sys_rx = self.sys.get_rx_status()
-        for be, be_rx, be_pwr in zip(self.backend, sys_rx, pwr):
-            for fe, err, fe_pwr in zip(be.frontend, be_rx, be_pwr):
-                sys_status &= (not err or not fe_pwr)
-                fe.status_ind.config(bg = 'red' if err else 'green')
-
-        self.statusbar_status_handler(sys_status)
-
-    def enumerate(self):
-        sys_idx = self.sys.get_physical_idx()
-        for be, be_idx in zip(self.backend, sys_idx):
-            for indicator, phys_idx in zip(be.m_pow, be_idx):
-                indicator.config(text = str(phys_idx).rjust(2))
-
     def set_pwr_vars(self, states):
         for be, be_state in zip(self.backend, states):
             if be_state is None:
@@ -78,7 +49,55 @@ class SystemUI():
     def get_pwr_vars(self):
         return [[var.get() for var in b.m_pow_var] for b in self.backend]
 
+    def quit(self, event):
+        if tk.messagebox.askyesno(message = "Exit application?"):
+            self.root.destroy()
+
+    # Methods that interact with the system
+
+    def get_status(self):
+        self.refresh.config(state = tk.DISABLED)
+        data_queue = queue.Queue()
+        stat_thread = threading.Thread(
+                target = self.sys.sys_status,
+                args = [data_queue])
+
+        def status_check():
+            if data_queue.empty():
+                self.root.after(100, status_check)
+
+            else:
+                sync_status, be_status, pwr_status, rx_status = data_queue.get()
+                sys_status = sync_status and all(be_status)
+
+                col = 'green' if sync_status else 'red'
+                self.sync.status_ind.config(bg = col)
+
+                for be, status in zip(self.backend, be_status):
+                    col = 'green' if status else 'red'
+                    be.status_ind.config(bg = col)
+
+                for be, be_rx, be_pwr in zip(self.backend, rx_status, pwr_status):
+                    for fe, fe_rx_err, fe_pwr in zip(be.frontend, be_rx, be_pwr):
+                        sys_status &= (not fe_rx_err or not fe_pwr)
+                        col = 'red' if fe_rx_err else 'green'
+                        fe.status_ind.config(bg = col)
+
+                self.statusbar_status_handler(sys_status)
+                self.refresh.config(state = tk.NORMAL)
+
+        stat_thread.start()
+        status_check()
+
+    def enumerate(self):
+        # TODO move to background thread
+        sys_idx = self.sys.get_physical_idx()
+        for be, be_idx in zip(self.backend, sys_idx):
+            for indicator, phys_idx in zip(be.m_pow, be_idx):
+                indicator.config(text = str(phys_idx).rjust(2))
+
     def get_power(self):
+        # TODO move to background thread
         states_in = self.sys.get_power()
         self.set_pwr_vars(states_in)
         states_out = self.get_pwr_vars()
@@ -86,69 +105,43 @@ class SystemUI():
             tk.messagebox.showerror(message = "Error setting power states")
 
     def set_power(self):
+        # TODO move to background thread
         states_in = self.get_pwr_vars()
         states_out = self.sys.set_power(states_in)
         if states_out != states_in:
             tk.messagebox.showerror(message = "Error setting power states")
 
-    def toggle_power_start(self, turn_on = False):
-        self.pwr_tog.config(state = tk.DISABLED)
-        popup = PowerPopup(self.root, turn_on)
-        pwr = self.sys.get_power()
-        self.toggle_power_next(popup, pwr, 0, turn_on)
-
-    def toggle_power_next(self, popup, pwr, i, turn_on):
-        if i < 4:
-            for elem in pwr:
-                elem[i] = turn_on
-
-            new_pwr = self.sys.set_power(pwr)
-            [be.flush() for be in self.sys.backend]
-
-            self.set_pwr_vars(new_pwr)
-            popup.set(i)
-
-            popup.after(1000, self.toggle_power_next,
-                    popup, pwr, i + 1, turn_on)
-
-        else:
-            popup.destroy()
-            self.pwr_tog.config(state = tk.NORMAL)
-            self.statusbar_power_handler(turn_on)
-
-            self.get_status()
-            self.enumerate()
-
     def toggle_bias(self, turn_on = False):
+        # TODO move to background thread
         val = BIAS_ON if turn_on else BIAS_OFF
         self.sys.set_bias(val)
         self.statusbar_bias_handler(turn_on)
 
+    def toggle_power(self, turn_on = False):
+        nmodules = 4
+        popup = PowerPopup(self.root, turn_on)
+        self.pwr_tog.config(state = tk.DISABLED)
+        starting_pwr = self.sys.get_power()
+
+        def set_next_pwr(pwr, i):
+            if i < nmodules:
+                for p in pwr: p[i] = turn_on
+                new_pwr = self.sys.set_power(pwr)
+                self.set_pwr_vars(new_pwr)
+                popup.set(i)
+                popup.after(1000, set_next_pwr, pwr, i + 1)
+            else:
+                popup.destroy()
+                self.pwr_tog.config(state = tk.NORMAL)
+                self.statusbar_power_handler(turn_on)
+                self.get_status()
+                self.enumerate()
+
+        set_next_pwr(starting_pwr, 0)
+
     def start_acq(self):
         self.acq_start_button.config(state = tk.DISABLED)
         finished = threading.Event()
-
-        def acq_start_fun():
-            self.sys.detector_disable(True)
-            time.sleep(1)
-
-            all_running = []
-            for be in self.backend:
-                # X.X.1.X -> /opt/acq1, X.X.2.X -> /opt/acq2
-                ip = be.backend.ip
-                idx = int(ip.split('.')[2]) - 1
-                fname = os.path.join(self.data_dirs[idx], ip + '.SGL')
-
-                running = threading.Event()
-                all_running.append(running)
-                be.put((fname, running))
-
-            for running in all_running:
-                running.wait()
-
-            self.sys.sync.sync_reset()
-            self.sys.detector_disable(False)
-            finished.set()
 
         def acq_check_fun():
             if finished.is_set():
@@ -157,7 +150,10 @@ class SystemUI():
             else:
                 self.root.after(100, acq_check_fun)
 
-        acq_start_thread = threading.Thread(target = acq_start_fun)
+        acq_start_thread = threading.Thread(
+                target = self.sys.acq_start,
+                args = [finished])
+
         acq_start_thread.start()
         acq_check_fun()
 
@@ -168,34 +164,6 @@ class SystemUI():
                 title = "Directory to store data",
                 initialdir = "/")
 
-        def acq_stop_fun():
-            self.sys.detector_disable(True)
-
-            ev = []
-            for be in self.backend:
-                e = threading.Event()
-                ev.append(e)
-                be.put((be.ui_data_queue, e))
-
-            for e in ev:
-                e.wait()
-
-            if data_dir:
-                sgl_files = []
-                for d in self.data_dirs:
-                    new_files = glob.glob('*.SGL', root_dir = d)
-                    new_files = [os.path.join(d, f) for f in new_files]
-                    sgl_files += new_files
-
-                try:
-                    for f in sgl_files:
-                        shutil.copy(f, data_dir)
-                        os.remove(f)
-                except PermissionError as e:
-                    logging.warning('Failed to move acquition files', exc_info = e)
-
-            finished.set()
-
         def acq_check_fun():
             if finished.is_set():
                 self.acq_start_button.config(state = tk.NORMAL)
@@ -203,37 +171,19 @@ class SystemUI():
             else:
                 self.root.after(100, acq_check_fun)
 
-        acq_stop_thread = threading.Thread(target = acq_stop_fun)
+        acq_stop_thread = threading.Thread(
+                target = self.sys.acq_stop,
+                args = [finished, data_dir])
+
         acq_stop_thread.start()
         acq_check_fun()
 
-    def __enter__(self):
-        logging.info("SystemUI enter context")
-        self.sys.sync.set_network_led(clear = False)
-        with ExitStack() as stack:
-            [stack.enter_context(b) for b in self.backend]
-            self._stack = stack.pop_all()
-
-        return self
-    
-    def __exit__(self, *context):
-        self.sys.sync.set_network_led(clear = True)
-        self._stack.__exit__(self, *context)
-        logging.info("SystemUI exit context")
-
-    def quit(self, event):
-        if tk.messagebox.askyesno(message = "Exit application?"):
-            self.root.destroy()
+    # Instantiate the UI
 
     def __init__(self, system_instance):
         self.root = tk.Tk()
         self.root.bind('<Escape>', self.quit)
-        self.data_dirs = ['/opt/acq1', '/opt/acq2']
         self.sys = system_instance
-        self._stack = None
-
-        main_pack_args = {'fill': tk.X, 'side': tk.TOP, 'expand': True, 'padx': 10, 'pady': 5}
-        button_pack_args = {'fill': tk.X, 'side': tk.TOP, 'padx': 10, 'pady': 5}
 
         # Top level notebook container
 
@@ -277,6 +227,8 @@ class SystemUI():
         self.acq_stop_button = tk.Button(self.acq_frame, text = "Stop acquisition",
                 command = self.stop_acq, state = tk.DISABLED)
 
+        button_pack_args = {'fill': tk.X, 'side': tk.TOP, 'padx': 10, 'pady': 5}
+
         self.acq_start_button.pack(**button_pack_args)
         self.acq_stop_button.pack(**button_pack_args)
 
@@ -306,9 +258,10 @@ class SystemUI():
 
         self.refresh = tk.Button(self.status_frame, text = "Refresh", command = self.get_status)
         self.enum = tk.Button(self.status_frame, text = "Enumerate", command = self.enumerate)
-        self.pwr_tog = ToggleButton(self.status_frame, "Power ON", "Power OFF", self.toggle_power_start)
+        self.pwr_tog = ToggleButton(self.status_frame, "Power ON", "Power OFF", self.toggle_power)
         self.bias_tog = ToggleButton(self.status_frame, "Bias ON", "Bias OFF", self.toggle_bias)
 
+        main_pack_args = {'fill': tk.X, 'side': tk.TOP, 'expand': True, 'padx': 10, 'pady': 5}
         self.refresh.pack(**main_pack_args)
         self.enum.pack(**main_pack_args)
         self.pwr_tog.pack(**main_pack_args)
@@ -376,6 +329,7 @@ class SystemUI():
 if __name__ == "__main__":
     logging.basicConfig(level = logging.INFO)
     sys = System()
-    with SystemUI(sys) as app:
+    app = SystemUI(sys)
+    with sys:
         app.root.mainloop()
 

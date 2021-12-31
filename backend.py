@@ -1,4 +1,4 @@
-import socket, logging, threading, time
+import socket, logging, threading, queue
 import command as cmd
 from gigex import Gigex, ignore_network_errors
 from frontend import Frontend
@@ -29,22 +29,38 @@ class BackendAcq:
             self.s.close()
 
     def __iter__(self):
-        """
         if self.s is None:
             return
-        """
         
         logging.info(f'{self.ip}: Acquisition started')
 
         while not self.stop.is_set():
             try:
-                time.sleep(0.1)
                 yield self.s.recv(4096)
-            except Exception: #TimeoutError:
+            except TimeoutError:
                 yield b''
 
-class Backend():
+def acquire(ip, stop, sink, running = None):
+    if running is None:
+        running = threading.Event()
 
+    with BackendAcq(ip, stop) as acq_inst:
+        if isinstance(sink, str):
+            logging.info(f'Create new ACQ worker thread to {sink}')
+            with open(sink, 'wb') as f:
+                running.set()
+                for d in acq_inst:
+                    f.write(d)
+
+        else:
+            logging.info(f'Create new ACQ worker thread to UI')
+            running.set()
+            for d in acq_inst:
+                try:
+                    sink.put_nowait(d)
+                except queue.Full: pass
+
+class Backend():
     def __getattr__(self, attr):
         return lambda *args, **kwds: [getattr(f, attr)(*args, **kwds) for f in self.frontend]
 
@@ -52,6 +68,74 @@ class Backend():
         self.ip = ip
         self.gx = Gigex(ip)
         self.frontend = [Frontend(self, i) for i in range(4)]
+
+        self.exit = threading.Event()
+        self.dest = queue.Queue()
+        self.cv = threading.Condition()
+
+        self.ui_mon_queue = queue.Queue()
+        self.ui_data_queue = queue.Queue(maxsize = 10)
+
+    def __enter__(self):
+        self.acq_management_thread = threading.Thread(
+                target = self.acq, daemon = False)
+        self.monitor_thread = threading.Thread(
+                target = self.mon, daemon = True)
+
+        self.exit.clear()
+        self.acq_management_thread.start()
+        self.monitor_thread.start()
+        return self
+
+    def __exit__(self, *context):
+        self.exit.set()
+
+        with self.cv:
+            self.cv.notify_all()
+
+        self.monitor_thread.join()
+        self.acq_management_thread.join()
+
+    def acq(self):
+        acq_stop = threading.Event()
+        acq_thread = threading.Thread(target = acquire,
+                args = [self.ip, acq_stop, self.ui_data_queue])
+        acq_thread.start()
+
+        with self.cv:
+            while True:
+                self.cv.wait_for(lambda: (self.exit.is_set() or
+                                          not self.dest.empty()))
+
+                acq_stop.set()
+                acq_thread.join()
+                acq_stop.clear()
+
+                if self.exit.is_set(): break
+                vals = self.dest.get()
+
+                acq_thread = threading.Thread(target = acquire,
+                        args = [self.ip, acq_stop, *vals])
+
+                acq_thread.start()
+
+        logging.info("Exit acq management thread")
+
+    def mon(self, interval = 10.0):
+        while True:
+            temps = self.get_all_temps()
+            currs = self.get_current()
+            self.ui_mon_queue.put_nowait((temps, currs))
+
+            if self.exit.wait(interval):
+                break
+
+        logging.info("Exit monitor thread")
+
+    def put(self, val):
+        self.dest.put(val)
+        with self.cv:
+            self.cv.notify_all()
 
     @ignore_network_errors(None)
     def backend_reset(self):
