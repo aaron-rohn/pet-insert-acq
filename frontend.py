@@ -150,7 +150,8 @@ class Frontend():
     @ignore_network_errors(None)
     def frontend_reset(self):
         cmd = command.frontend_rst(self.index)
-        self.backend.gx.spi(cmd)
+        with self.backend.gx:
+            self.backend.gx.spi(cmd)
 
     @ignore_network_errors(-1)
     def tt_stall_disable(self, disable = True):

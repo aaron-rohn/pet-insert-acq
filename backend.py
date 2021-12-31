@@ -1,4 +1,4 @@
-import socket, logging
+import socket, logging, threading, time
 import command as cmd
 from gigex import Gigex, ignore_network_errors
 from frontend import Frontend
@@ -6,39 +6,41 @@ from frontend import Frontend
 data_port = 5555
 
 class BackendAcq:
-
     def __init__(self, ip, stop):
         self.ip = ip
         self.stop = stop
 
     def __enter__(self):
-        logging.info(f'{self.ip}:{data_port} connect for acquisiton')
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.s.settimeout(0.1)
 
         try:
             self.s.connect((self.ip, data_port))
+            logging.warning(f'{self.ip}: Acquisition connected')
         except (TimeoutError, ConnectionError):
-            logging.warning(f'{self.ip}: failed to connect for acquisition')
+            logging.warning(f'{self.ip}: Acquisition failed')
             self.s = None
 
         return self
 
     def __exit__(self, *context):
         if self.s is not None:
-            logging.info(f'{self.ip}: closing connection for acquisition')
+            logging.info(f'{self.ip}: Stop acquisition')
             self.s.close()
 
     def __iter__(self):
+        """
         if self.s is None:
             return
+        """
         
-        logging.info(f'{self.ip}: starting data acquisition')
+        logging.info(f'{self.ip}: Acquisition started')
 
         while not self.stop.is_set():
             try:
+                time.sleep(0.1)
                 yield self.s.recv(4096)
-            except TimeoutError:
+            except Exception: #TimeoutError:
                 yield b''
 
 class Backend():
@@ -48,12 +50,13 @@ class Backend():
 
     def __init__(self, ip):
         self.ip = ip
-        self.gx = Gigex(self.ip)
+        self.gx = Gigex(ip)
         self.frontend = [Frontend(self, i) for i in range(4)]
 
     @ignore_network_errors(None)
     def backend_reset(self):
-        self.gx.spi(cmd.rst())
+        with self.gx:
+            self.gx.spi(cmd.rst())
 
     @ignore_network_errors(None)
     def flush(self):

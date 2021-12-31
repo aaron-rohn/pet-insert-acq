@@ -2,9 +2,6 @@ import tkinter as tk
 from sync import Sync
 
 class SyncUI():
-    def __getattr__(self, attr):
-        return getattr(self.sync, attr)
-
     def __init__(self, sync_instance, root):
         self.sync = sync_instance
 

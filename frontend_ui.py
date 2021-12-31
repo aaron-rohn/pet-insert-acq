@@ -19,9 +19,6 @@ def scale_value(value, minrange, maxrange):
     return '#%02X%02X%02X' % (r, g, 0)
 
 class FrontendUI():
-    def __getattr__(self, attr):
-        return getattr(self.frontend, attr)
-
     def __init__(self, frontend_instance, root):
         self.frontend = frontend_instance
 
@@ -41,19 +38,15 @@ class FrontendUI():
         self.current_ind.pack(side = tk.LEFT)
 
         self.temps_label.pack(side = tk.LEFT, padx = 10)
-        [ts.pack(side = tk.LEFT, padx = 5, expand = True) for ts in self.temps_ind]
 
-    def get_all_temps(self):
-        temp_vals = self.frontend.get_all_temps()
+        for ts in self.temps_ind:
+            ts.pack(side = tk.LEFT, padx = 5, expand = True)
 
-        for t,ts in zip(temp_vals, self.temps_ind):
+    def set_all_temps(self, temps):
+        for t, ind in zip(temps, self.temps_ind):
             col = scale_value(t, 20.0, 30.0)
-            ts.config(bg = col)
+            ind.config(bg = col)
 
-        return temp_vals 
-
-    def get_current(self):
-        c = self.frontend.get_current()
-        col = scale_value(c, 600, 700)
+    def set_current(self, curr):
+        col = scale_value(curr, 600, 700)
         self.current_ind.config(bg = col)
-        return c

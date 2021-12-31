@@ -10,7 +10,7 @@ def ignore_network_errors(default_return):
             try:
                 return unsafe(*args, **kwds)
             except NetworkErrors as e:
-                logging.error(f'{repr(e)}: {unsafe.__name__}')
+                #logging.error(f'{repr(e)}: {unsafe.__name__}')
                 logging.debug('', exc_info = 1)
                 return default_return
         return safe_fun
@@ -23,14 +23,9 @@ class Gigex():
         self.ip = ip
         self.sys = None
         self.lock = threading.Lock()
-        self.local = threading.local()
 
     def __enter__(self):
-        if 'owns' in self.local.__dict__ and self.local.owns:
-            return self
-
         self.lock.acquire()
-        self.local.owns = True
         self.sys = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sys.settimeout(0.1)
 
@@ -43,25 +38,23 @@ class Gigex():
 
     def __exit__(self, *context):
         self.sys.close()
-        self.local.owns = False
         self.lock.release()
 
     def spi(self, *data):
-        with self:
-            nwords_i = len(data)
-            nwords_b = nwords_i.to_bytes(4,'big')
-            data = b''.join([d.to_bytes(4,'big') for d in data])
+        nwords_i = len(data)
+        nwords_b = nwords_i.to_bytes(4,'big')
+        data = b''.join([d.to_bytes(4,'big') for d in data])
 
-            cmd = ((0xEE2120FF).to_bytes(4,'big') +
-                   nwords_b + nwords_b + data)
+        cmd = ((0xEE2120FF).to_bytes(4,'big') +
+               nwords_b + nwords_b + data)
 
-            self.sys.send(cmd)
-            code,stat,_,_, *resp = self.sys.recv(1024)
+        self.sys.send(cmd)
+        code,stat,_,_, *resp = self.sys.recv(1024)
 
-            resp = [resp[i:i+4] for i in range(0, len(resp), 4)]
-            resp = [int.from_bytes(r,'big') for r in resp]
+        resp = [resp[i:i+4] for i in range(0, len(resp), 4)]
+        resp = [int.from_bytes(r,'big') for r in resp]
 
-            return (code == 0xEE) and (stat == 0), resp
+        return (code == 0xEE) and (stat == 0), resp
 
     def flush(self):
         with self:
