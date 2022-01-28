@@ -26,6 +26,9 @@ class SystemUI():
     def statusbar_status_handler(self, status):
         self.statusbar_label.config(text = 'Status: {}'.format('OK' if status else 'ERROR'))
 
+    def statusbar_enum_handler(self, status):
+        self.statusbar_enum.config(text = 'Enum: {}'.format('OK' if status else 'ERROR'))
+
     def statusbar_power_handler(self, power):
         self.statusbar_power_label.config(text = 'Power: {}'.format('ON' if power else 'OFF'))
 
@@ -67,7 +70,7 @@ class SystemUI():
                 self.root.after(100, status_check)
 
             else:
-                sync_status, be_status, pwr_status, rx_status = data_queue.get()
+                sync_status, be_status, sys_pwr, sys_rx_err, sys_enum = data_queue.get()
                 sys_status = sync_status and all(be_status)
 
                 col = 'green' if sync_status else 'red'
@@ -77,24 +80,24 @@ class SystemUI():
                     col = 'green' if status else 'red'
                     be.status_ind.config(bg = col)
 
-                for be, be_rx, be_pwr in zip(self.backend, rx_status, pwr_status):
-                    for fe, fe_rx_err, fe_pwr in zip(be.frontend, be_rx, be_pwr):
+                for be, be_rx_err, be_pwr in zip(self.backend, sys_rx_err, sys_pwr):
+                    for fe, fe_rx_err, fe_pwr in zip(be.frontend, be_rx_err, be_pwr):
                         sys_status &= (not fe_rx_err or not fe_pwr)
                         col = 'red' if fe_rx_err else 'green'
                         fe.status_ind.config(bg = col)
 
+                enum_status = True
+                for be, be_enum, be_pwr in zip(self.backend, sys_enum, sys_pwr):
+                    for indicator, fe_enum, fe_pwr in zip(be.m_pow, be_enum, be_pwr):
+                        enum_status &= (fe_enum != -1 or not fe_pwr)
+                        indicator.config(text = str(fe_enum).rjust(2))
+
                 self.statusbar_status_handler(sys_status)
+                self.statusbar_enum_handler(enum_status)
                 self.refresh.config(state = tk.NORMAL)
 
         stat_thread.start()
         status_check()
-
-    def enumerate(self):
-        # TODO move to background thread
-        sys_idx = self.sys.get_physical_idx()
-        for be, be_idx in zip(self.backend, sys_idx):
-            for indicator, phys_idx in zip(be.m_pow, be_idx):
-                indicator.config(text = str(phys_idx).rjust(2))
 
     def get_power(self):
         # TODO move to background thread
@@ -135,7 +138,6 @@ class SystemUI():
                 self.pwr_tog.config(state = tk.NORMAL)
                 self.statusbar_power_handler(turn_on)
                 self.get_status()
-                self.enumerate()
 
         set_next_pwr(starting_pwr, 0)
 
@@ -205,16 +207,19 @@ class SystemUI():
         self.statusbar_frame.pack(side = tk.BOTTOM, fill = tk.X)
 
         self.statusbar_label = tk.Label(self.statusbar_frame)
+        self.statusbar_enum = tk.Label(self.statusbar_frame)
         self.statusbar_power_label = tk.Label(self.statusbar_frame)
         self.statusbar_bias_label = tk.Label(self.statusbar_frame)
         self.statusbar_acq_label = tk.Label(self.statusbar_frame)
 
         self.statusbar_label.pack(side = tk.LEFT, padx = 5)
+        self.statusbar_enum.pack(side = tk.LEFT, padx = 5)
         self.statusbar_power_label.pack(side = tk.LEFT, padx = 5)
         self.statusbar_bias_label.pack(side = tk.LEFT, padx = 5)
         self.statusbar_acq_label.pack(side = tk.LEFT, padx = 5)
 
         self.statusbar_status_handler(False)
+        self.statusbar_enum_handler(False)
         self.statusbar_power_handler(False)
         self.statusbar_bias_handler(False)
         self.statusbar_acq_handler(False)
@@ -257,15 +262,22 @@ class SystemUI():
         # Status page - Main operation buttons
 
         self.refresh = tk.Button(self.status_frame, text = "Refresh", command = self.get_status)
-        self.enum = tk.Button(self.status_frame, text = "Enumerate", command = self.enumerate)
         self.pwr_tog = ToggleButton(self.status_frame, "Power ON", "Power OFF", self.toggle_power)
         self.bias_tog = ToggleButton(self.status_frame, "Bias ON", "Bias OFF", self.toggle_bias)
 
+        self.power_rd = tk.Button(self.status_frame, text = "Read power state",
+                command = self.get_power)
+
+        self.power_wr = tk.Button(self.status_frame, text = "Set power state",
+                command = self.set_power)
+
         main_pack_args = {'fill': tk.X, 'side': tk.TOP, 'expand': True, 'padx': 10, 'pady': 5}
         self.refresh.pack(**main_pack_args)
-        self.enum.pack(**main_pack_args)
         self.pwr_tog.pack(**main_pack_args)
         self.bias_tog.pack(**main_pack_args)
+        Separator(self.status_frame).pack(fill = tk.X, padx = 60, pady = 30)
+        self.power_rd.pack(**main_pack_args)
+        self.power_wr.pack(**main_pack_args)
 
         # Command page - Secondary operation buttons
 
@@ -274,12 +286,6 @@ class SystemUI():
 
         self.frontend_rst = tk.Button(self.command_frame, text = "Frontend reset",
                 command = lambda: self.cmd_output_print(self.sys.frontend_reset()))
-
-        self.power_rd = tk.Button(self.command_frame, text = "Read power state",
-                command = self.get_power)
-
-        self.power_wr = tk.Button(self.command_frame, text = "Set power state",
-                command = self.set_power)
 
         self.current = tk.Button(self.command_frame, text = "Read current",
                 command = lambda: self.cmd_output_print(self.sys.get_current()))
@@ -307,8 +313,6 @@ class SystemUI():
 
         self.backend_rst.pack(**button_pack_args)
         self.frontend_rst.pack(**button_pack_args)
-        self.power_rd.pack(**button_pack_args)
-        self.power_wr.pack(**button_pack_args)
         self.current.pack(**button_pack_args)
         self.temps.pack(**button_pack_args)
 

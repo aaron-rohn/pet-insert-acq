@@ -35,7 +35,8 @@ class System():
         backend  = self.get_status()
         power    = self.get_power()
         frontend = self.get_rx_status()
-        data_queue.put((sync, backend, power, frontend))
+        enum     = self.get_physical_idx()
+        data_queue.put((sync, backend, power, frontend, enum))
 
     def acq_start(self, finished):
         self.detector_disable(True)
@@ -59,9 +60,7 @@ class System():
         self.detector_disable(True)
 
         for be in self.backend:
-            running = threading.Event()
-            be.put((be.ui_data_queue, running))
-            running.wait()
+            be.put((be.ui_data_queue,))
 
         if data_dir:
             sgl_files = []

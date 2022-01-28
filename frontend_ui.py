@@ -48,5 +48,5 @@ class FrontendUI():
             ind.config(bg = col)
 
     def set_current(self, curr):
-        col = scale_value(curr, 600, 700)
+        col = scale_value(curr, 600, 800)
         self.current_ind.config(bg = col)

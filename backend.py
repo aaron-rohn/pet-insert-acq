@@ -37,7 +37,8 @@ class BackendAcq:
         while not self.stop.is_set():
             try:
                 yield self.s.recv(4096)
-            except TimeoutError:
+            #except TimeoutError:
+            except:
                 yield b''
 
 def acquire(ip, stop, sink, running = None):
