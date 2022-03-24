@@ -331,7 +331,7 @@ class SystemUI():
         self.get_status()
 
 if __name__ == "__main__":
-    logging.basicConfig(level = logging.INFO)
+    logging.basicConfig(level = logging.DEBUG)
     sys = System()
     app = SystemUI(sys)
     with sys:

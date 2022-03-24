@@ -85,7 +85,7 @@ class Backend():
 
         self.exit.clear()
         self.acq_management_thread.start()
-        self.monitor_thread.start()
+        #self.monitor_thread.start()
         return self
 
     def __exit__(self, *context):
@@ -94,7 +94,7 @@ class Backend():
         with self.cv:
             self.cv.notify_all()
 
-        self.monitor_thread.join()
+        #self.monitor_thread.join()
         self.acq_management_thread.join()
 
     def acq(self):

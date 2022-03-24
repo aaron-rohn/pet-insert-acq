@@ -23,10 +23,15 @@ PERIOD_READ     = 9
 SGL_RATE_READ   = 0xA
 GPIO_FRONEND    = 0xB
 
+CMD_RESPONSE    = 0xF
+
 CMD_EMPTY = 0xF0000000
 
 def payload(cmd_int):
     return cmd_int & 0xFFFFF
+
+def command(cmd_int):
+    return (cmd_int >> 20) & 0xF if cmd_int >= 0 else cmd_int
 
 def module(cmd_int):
     return (cmd_int >> 24) & 0xF if cmd_int >= 0 else cmd_int
