@@ -13,7 +13,7 @@ def ignore_network_errors(default_return):
                 return unsafe(*args, **kwds)
 
             except ModuleNotPowered as e:
-                logging.info(f'{repr(e)}\n')
+                logging.debug(f'{repr(e)}')
                 return default_return
 
             except NetworkErrors as e:
@@ -52,6 +52,9 @@ class Gigex():
         nwords_b = nwords_i.to_bytes(4,'big')
         data = b''.join([d.to_bytes(4,'big') for d in data])
 
+        # 8.75 MHz SPI access
+        # 32 bit word length
+        # release chip select
         cmd_bytes = ((0xEE2120FF).to_bytes(4,'big') +
                 nwords_b + nwords_b + data)
 

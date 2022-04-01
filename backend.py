@@ -16,7 +16,7 @@ class BackendAcq:
 
         try:
             self.s.connect((self.ip, data_port))
-            logging.warning(f'{self.ip}: Acquisition connected')
+            logging.debug(f'{self.ip}: Acquisition connected')
         except (TimeoutError, ConnectionError):
             logging.warning(f'{self.ip}: Acquisition failed')
             self.s = None
@@ -25,14 +25,14 @@ class BackendAcq:
 
     def __exit__(self, *context):
         if self.s is not None:
-            logging.info(f'{self.ip}: Stop acquisition')
+            logging.debug(f'{self.ip}: Stop acquisition')
             self.s.close()
 
     def __iter__(self):
         if self.s is None:
             return
         
-        logging.info(f'{self.ip}: Acquisition started')
+        logging.debug(f'{self.ip}: Acquisition started')
 
         while not self.stop.is_set():
             try:
@@ -47,14 +47,14 @@ def acquire(ip, stop, sink, running = None):
 
     with BackendAcq(ip, stop) as acq_inst:
         if isinstance(sink, str):
-            logging.info(f'Create new ACQ worker thread to {sink}')
+            logging.debug(f'Create new ACQ worker thread to {sink}')
             with open(sink, 'wb') as f:
                 running.set()
                 for d in acq_inst:
                     f.write(d)
 
         else:
-            logging.info(f'Create new ACQ worker thread to UI')
+            logging.debug(f'Create new ACQ worker thread to UI')
             running.set()
             for d in acq_inst:
                 try:
@@ -85,7 +85,7 @@ class Backend():
 
         self.exit.clear()
         self.acq_management_thread.start()
-        #self.monitor_thread.start()
+        self.monitor_thread.start()
         return self
 
     def __exit__(self, *context):
@@ -94,7 +94,7 @@ class Backend():
         with self.cv:
             self.cv.notify_all()
 
-        #self.monitor_thread.join()
+        self.monitor_thread.join()
         self.acq_management_thread.join()
 
     def acq(self):
@@ -120,7 +120,7 @@ class Backend():
 
                 acq_thread.start()
 
-        logging.info("Exit acq management thread")
+        logging.debug("Exit acq management thread")
 
     def mon(self, interval = 10.0):
         while True:
@@ -131,7 +131,7 @@ class Backend():
             if self.exit.wait(interval):
                 break
 
-        logging.info("Exit monitor thread")
+        logging.debug("Exit monitor thread")
 
     def put(self, val):
         self.dest.put(val)
@@ -139,9 +139,15 @@ class Backend():
             self.cv.notify_all()
 
     @ignore_network_errors(None)
-    def backend_reset(self):
+    def backend_reset_soft(self):
+        r1 = self.gx.send(cmd.rst_soft(clear = False))
+        r2 = self.gx.send(cmd.rst_soft(clear = True))
+        return (cmd.payload(r1) == 1) & (cmd.payload(r2) == 0)
+
+    @ignore_network_errors(None)
+    def backend_reset_hard(self):
         with self.gx:
-            self.gx.spi(cmd.rst())
+            self.gx.spi(cmd.rst_hard())
 
     @ignore_network_errors(None)
     def flush(self):
@@ -155,11 +161,6 @@ class Backend():
     def get_status(self):
         c = cmd.backend_status(10)
         return self.gx.send(c) == c
-
-    @ignore_network_errors([True]*4)
-    def get_rx_status(self):
-        resp = self.gx.send(cmd.gpio_rd_rx_err())
-        return cmd.mask_to_bool(cmd.payload(resp) & 0xF)
 
     @ignore_network_errors([True]*4)
     def get_power(self):
@@ -176,3 +177,7 @@ class Backend():
         resp = [self.gx.send(cmd.get_current(m)) for m in range(4)]
         return [cmd.payload(m) for m in resp]
 
+    @ignore_network_errors(-1)
+    def get_counter(self, ch):
+        resp = [self.gx.send(cmd.backend_counter(m,ch)) for m in range(4)]
+        return cmd.payload(resp)

@@ -68,23 +68,16 @@ class SystemUI():
         def status_check():
             if data_queue.empty():
                 self.root.after(100, status_check)
-
             else:
-                sync_status, be_status, sys_pwr, sys_rx_err, sys_enum = data_queue.get()
-                sys_status = sync_status and all(be_status)
+                sync_status, be_status, sys_pwr, sys_enum = data_queue.get()
 
+                sys_status = sync_status and all(be_status)
                 col = 'green' if sync_status else 'red'
                 self.sync.status_ind.config(bg = col)
 
                 for be, status in zip(self.backend, be_status):
                     col = 'green' if status else 'red'
                     be.status_ind.config(bg = col)
-
-                for be, be_rx_err, be_pwr in zip(self.backend, sys_rx_err, sys_pwr):
-                    for fe, fe_rx_err, fe_pwr in zip(be.frontend, be_rx_err, be_pwr):
-                        sys_status &= (not fe_rx_err or not fe_pwr)
-                        col = 'red' if fe_rx_err else 'green'
-                        fe.status_ind.config(bg = col)
 
                 enum_status = True
                 for be, be_enum, be_pwr in zip(self.backend, sys_enum, sys_pwr):
@@ -281,8 +274,11 @@ class SystemUI():
 
         # Command page - Secondary operation buttons
 
-        self.backend_rst = tk.Button(self.command_frame, text = "Backend reset",
-                command = lambda: self.cmd_output_print(self.sys.backend_reset()))
+        self.backend_rst_soft = tk.Button(self.command_frame, text = "Backend reset soft",
+                command = lambda: self.cmd_output_print(self.sys.backend_reset_soft()))
+
+        self.backend_rst_hard = tk.Button(self.command_frame, text = "Backend reset hard",
+                command = lambda: self.cmd_output_print(self.sys.backend_reset_hard()))
 
         self.frontend_rst = tk.Button(self.command_frame, text = "Frontend reset",
                 command = lambda: self.cmd_output_print(self.sys.frontend_reset()))
@@ -293,6 +289,13 @@ class SystemUI():
         self.temps = tk.Button(self.command_frame, text = "Read temperature",
                 command = lambda: self.cmd_output_print(self.sys.get_all_temps()))
 
+        self.be_sgl_rate_rd = tk.Button(self.command_frame, text = "Read backend singles rate",
+                command = lambda: self.cmd_output_print(self.sys.get_counter(0)))
+        self.be_tt_rate_rd  = tk.Button(self.command_frame, text = "Read backend time tag rate",
+                command = lambda: self.cmd_output_print(self.sys.get_counter(1)))
+        self.be_cmd_rate_rd = tk.Button(self.command_frame, text = "Read backend command rate",
+                command = lambda: self.cmd_output_print(self.sys.get_counter(2)))
+
         self.bias_rd = tk.Button(self.command_frame, text = "Read bias",
                 command = lambda: self.cmd_output_print(self.sys.get_bias()))
 
@@ -302,7 +305,7 @@ class SystemUI():
         self.period_rd = tk.Button(self.command_frame, text = "Read period", 
                 command = lambda: self.cmd_output_print(self.sys.get_period()))
 
-        self.sgl_rate_rd = tk.Button(self.command_frame, text = "Read singles rate",
+        self.sgl_rate_rd = tk.Button(self.command_frame, text = "Read frontend singles rate",
                 command = lambda: self.cmd_output_print(self.sys.get_all_singles_rates()))
 
         self.tt_stall = ToggleButton(self.command_frame, "TT Stall ON", "TT Stall OFF",
@@ -311,10 +314,14 @@ class SystemUI():
         self.det_disable = ToggleButton(self.command_frame, "Detector ON", "Detector OFF",
                 lambda s: self.cmd_output_print(self.sys.detector_disable(s)))
 
-        self.backend_rst.pack(**button_pack_args)
+        self.backend_rst_soft.pack(**button_pack_args)
+        self.backend_rst_hard.pack(**button_pack_args)
         self.frontend_rst.pack(**button_pack_args)
         self.current.pack(**button_pack_args)
         self.temps.pack(**button_pack_args)
+        self.be_sgl_rate_rd.pack(**button_pack_args)
+        self.be_tt_rate_rd.pack(**button_pack_args)
+        self.be_cmd_rate_rd.pack(**button_pack_args)
 
         Separator(self.command_frame).pack(fill = tk.X, padx = 60, pady = 30)
 
@@ -331,7 +338,7 @@ class SystemUI():
         self.get_status()
 
 if __name__ == "__main__":
-    logging.basicConfig(level = logging.DEBUG)
+    logging.basicConfig(level = logging.INFO)
     sys = System()
     app = SystemUI(sys)
     with sys:

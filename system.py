@@ -14,8 +14,8 @@ class System():
         return lambda *args, **kwds: [getattr(b, attr)(*args, **kwds) for b in self.backend]
 
     def __enter__(self):
-        logging.info("System enter context")
         self.sync.set_network_led(clear = False)
+        self.set_network_led(clear = False)
         with ExitStack() as stack:
             [stack.enter_context(b) for b in self.backend]
             self._stack = stack.pop_all()
@@ -23,20 +23,18 @@ class System():
     
     def __exit__(self, *context):
         self.sync.set_network_led(clear = True)
+        self.set_network_led(clear = True)
         self._stack.__exit__(self, *context)
-        logging.info("System exit context")
 
     def set_power(self, states = [[False]*4]*4):
         return [b.set_power(s) for b,s in zip(self.backend, states)]
 
     def sys_status(self, data_queue):
-        self.flush()
         sync     = self.sync.get_status()
         backend  = self.get_status()
         power    = self.get_power()
-        frontend = self.get_rx_status()
         enum     = self.get_physical_idx()
-        data_queue.put((sync, backend, power, frontend, enum))
+        data_queue.put((sync, backend, power, enum))
 
     def acq_start(self, finished):
         self.detector_disable(True)

@@ -22,18 +22,13 @@ class FrontendUI():
     def __init__(self, frontend_instance, root):
         self.frontend = frontend_instance
 
-        self.status_label  = tk.Label(root, text = "Status:")
         self.current_label = tk.Label(root, text = "Current:")
         self.temps_label   = tk.Label(root, text = "Temp:")
 
-        self.status_ind  = tk.Canvas(root, bg = 'red', height = 10, width = 10)
         self.current_ind = tk.Canvas(root, bg = 'red', height = 10, width = 10)
         self.temps_ind  = [tk.Canvas(root, bg = 'red', height = 10, width = 10) for _ in range(8)]
 
     def pack(self):
-        self.status_label.pack(side = tk.LEFT, padx = 10)
-        self.status_ind.pack(side = tk.LEFT)
-
         self.current_label.pack(side = tk.LEFT, padx = 10)
         self.current_ind.pack(side = tk.LEFT)
 

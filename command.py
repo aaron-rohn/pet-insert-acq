@@ -7,21 +7,23 @@ def bool_to_mask(bits):
         value |= (int(v) << i)
     return value
 
-RST             = 0
+RST = 0x0
 
-DAC_WRITE       = 1
-ADC_READ        = 2
-MODULE_ID       = 3
-
-SET_POWER       = 4
-GET_CURRENT     = 5
-GPIO            = 6
-NOP             = 7
-
-DAC_READ        = 8
-PERIOD_READ     = 9
+# Frontend commands
+DAC_WRITE       = 0x1
+ADC_READ        = 0x2
+MODULE_ID       = 0x3
+DAC_READ        = 0x8
+PERIOD_READ     = 0x9
 SGL_RATE_READ   = 0xA
 GPIO_FRONEND    = 0xB
+
+# Backend commands
+SET_POWER       = 0x4
+GET_CURRENT     = 0x5
+GPIO            = 0x6
+NOP             = 0x7
+COUNTER_READ    = 0xC
 
 CMD_RESPONSE    = 0xF
 
@@ -63,11 +65,23 @@ def gpio_backend(write = 0, bank = 1, offset = 0, mask = 0, value = 0):
                            ((mask   & 0x0F) <<  4) |
                            ((value  & 0x0F) <<  0)))
 
-def rst():
-    """ set bit 0 of bank 0 to reset the firmware """
+def rst_soft(clear = True):
+    """ set bit 0 of bank 0 to reset all backend components except
+    for the microblaze - this retains the module power states
+    """
     return gpio_backend(write  = 1, 
                         bank   = 0,
                         offset = 0,
+                        mask   = 1,
+                        value  = 0 if clear else 1)
+    
+def rst_hard():
+    """ set bit 3 of bank 0 to reset all backend components
+    including the microblaze, powering off the frontend
+    """
+    return gpio_backend(write  = 1, 
+                        bank   = 0,
+                        offset = 3,
                         mask   = 1,
                         value  = 1)
 
@@ -101,6 +115,16 @@ def get_current(m):
 
 def backend_status(val = 0):
     return build(0, NOP, val)
+
+def backend_counter(module, channel):
+    """ read a counter for the specified module
+    The channel value corresponds to:
+    0 -> single events
+    1 -> timetags
+    2 -> commands from frontend
+    The corresponding counter is reset upon reading
+    """
+    return build(module, COUNTER_READ, channel)
 
 # Frontend commands
 
