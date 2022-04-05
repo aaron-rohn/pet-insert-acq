@@ -9,6 +9,7 @@ class System():
         backend_ips = ['192.168.1.101', '192.168.1.102', '192.168.2.103', '192.168.2.104']
         self.data_dirs = ['/opt/acq1', '/opt/acq2']
         self.backend = [Backend(a) for a in backend_ips]
+        self.total_counts = 0
 
     def __getattr__(self, attr):
         return lambda *args, **kwds: [getattr(b, attr)(*args, **kwds) for b in self.backend]
@@ -36,7 +37,21 @@ class System():
         enum     = self.get_physical_idx()
         data_queue.put((sync, backend, power, enum))
 
+    def latest_counts(self):
+        for be in self.backend:
+            while not be.count_rate_queue.empty():
+                for cts in be.count_rate_queue.get():
+                    if cts >= 0:
+                        self.total_counts += cts
+
+        return self.total_counts
+
     def acq_start(self, finished):
+        self.total_counts = 0
+        for be in self.backend:
+            with be.count_rate_queue.mutex:
+                be.count_rate_queue.clear()
+
         self.detector_disable(True)
         time.sleep(1)
 

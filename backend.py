@@ -12,12 +12,12 @@ class BackendAcq:
 
     def __enter__(self):
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.s.settimeout(0.1)
+        self.s.settimeout(1)
 
         try:
             self.s.connect((self.ip, data_port))
             logging.debug(f'{self.ip}: Acquisition connected')
-        except (TimeoutError, ConnectionError):
+        except (OSError, TimeoutError, ConnectionError):
             logging.warning(f'{self.ip}: Acquisition failed')
             self.s = None
 
@@ -37,8 +37,10 @@ class BackendAcq:
         while not self.stop.is_set():
             try:
                 yield self.s.recv(4096)
-            #except TimeoutError:
-            except:
+            except TimeoutError:
+                yield b''
+            except Exception as e:
+                logging.warning(f'{self.ip}: Failed to receive data, {repr(e)}')
                 yield b''
 
 def acquire(ip, stop, sink, running = None):
@@ -74,6 +76,7 @@ class Backend():
         self.dest = queue.Queue()
         self.cv = threading.Condition()
 
+        self.count_rate_queue = queue.Queue()
         self.ui_mon_queue = queue.Queue()
         self.ui_data_queue = queue.Queue(maxsize = 10)
 
@@ -127,6 +130,7 @@ class Backend():
             temps = self.get_all_temps()
             currs = self.get_current()
             self.ui_mon_queue.put_nowait((temps, currs))
+            self.count_rate_queue.put(self.get_counter(0))
 
             if self.exit.wait(interval):
                 break
@@ -177,7 +181,7 @@ class Backend():
         resp = [self.gx.send(cmd.get_current(m)) for m in range(4)]
         return [cmd.payload(m) for m in resp]
 
-    @ignore_network_errors(-1)
+    @ignore_network_errors([-1]*4)
     def get_counter(self, ch):
         resp = [self.gx.send(cmd.backend_counter(m,ch)) for m in range(4)]
-        return cmd.payload(resp)
+        return [cmd.payload(r) for r in resp]

@@ -1,6 +1,7 @@
 import logging, threading, queue
 import tkinter.filedialog
 import tkinter as tk
+from datetime import datetime, timedelta
 from tkinter.ttk import Separator, Notebook
 from frontend import BIAS_ON, BIAS_OFF
 from system import System
@@ -137,12 +138,17 @@ class SystemUI():
     def start_acq(self):
         self.acq_start_button.config(state = tk.DISABLED)
         finished = threading.Event()
+        self.acq_start_time = datetime.now()
 
         def acq_check_fun():
             if finished.is_set():
                 self.acq_stop_button.config(state = tk.NORMAL)
                 self.statusbar_acq_handler(True)
             else:
+                tdiff = datetime.now() - self.acq_start_time
+                ncounts = self.sys.latest_counts()
+                self.acq_duration_label.config(text = f'Elapsed: {tdiff}')
+                self.acq_counts_label.config(text = f'Singles: {ncounts}')
                 self.root.after(100, acq_check_fun)
 
         acq_start_thread = threading.Thread(
@@ -225,10 +231,15 @@ class SystemUI():
         self.acq_stop_button = tk.Button(self.acq_frame, text = "Stop acquisition",
                 command = self.stop_acq, state = tk.DISABLED)
 
+        self.acq_duration_label = tk.Label(self.acq_frame)
+        self.acq_counts_label = tk.Label(self.acq_frame)
+
         button_pack_args = {'fill': tk.X, 'side': tk.TOP, 'padx': 10, 'pady': 5}
 
         self.acq_start_button.pack(**button_pack_args)
         self.acq_stop_button.pack(**button_pack_args)
+        self.acq_duration_label.pack(**button_pack_args)
+        self.acq_counts_label.pack(**button_pack_args)
 
         # Status page - sync element
 
@@ -274,21 +285,12 @@ class SystemUI():
 
         # Command page - Secondary operation buttons
 
+        """ Backend command buttons """
+
         self.backend_rst_soft = tk.Button(self.command_frame, text = "Backend reset soft",
                 command = lambda: self.cmd_output_print(self.sys.backend_reset_soft()))
-
         self.backend_rst_hard = tk.Button(self.command_frame, text = "Backend reset hard",
                 command = lambda: self.cmd_output_print(self.sys.backend_reset_hard()))
-
-        self.frontend_rst = tk.Button(self.command_frame, text = "Frontend reset",
-                command = lambda: self.cmd_output_print(self.sys.frontend_reset()))
-
-        self.current = tk.Button(self.command_frame, text = "Read current",
-                command = lambda: self.cmd_output_print(self.sys.get_current()))
-
-        self.temps = tk.Button(self.command_frame, text = "Read temperature",
-                command = lambda: self.cmd_output_print(self.sys.get_all_temps()))
-
         self.be_sgl_rate_rd = tk.Button(self.command_frame, text = "Read backend singles rate",
                 command = lambda: self.cmd_output_print(self.sys.get_counter(0)))
         self.be_tt_rate_rd  = tk.Button(self.command_frame, text = "Read backend time tag rate",
@@ -296,40 +298,34 @@ class SystemUI():
         self.be_cmd_rate_rd = tk.Button(self.command_frame, text = "Read backend command rate",
                 command = lambda: self.cmd_output_print(self.sys.get_counter(2)))
 
-        self.bias_rd = tk.Button(self.command_frame, text = "Read bias",
-                command = lambda: self.cmd_output_print(self.sys.get_bias()))
-
-        self.thresh_rd = tk.Button(self.command_frame, text = "Read thresh",
-                command = lambda: self.cmd_output_print(self.sys.get_thresh()))
-
-        self.period_rd = tk.Button(self.command_frame, text = "Read period", 
-                command = lambda: self.cmd_output_print(self.sys.get_period()))
-
-        self.sgl_rate_rd = tk.Button(self.command_frame, text = "Read frontend singles rate",
-                command = lambda: self.cmd_output_print(self.sys.get_all_singles_rates()))
-
-        self.tt_stall = ToggleButton(self.command_frame, "TT Stall ON", "TT Stall OFF",
-                lambda s: self.cmd_output_print(self.sys.tt_stall_disable(s)))
-
-        self.det_disable = ToggleButton(self.command_frame, "Detector ON", "Detector OFF",
-                lambda s: self.cmd_output_print(self.sys.detector_disable(s)))
-
         self.backend_rst_soft.pack(**button_pack_args)
         self.backend_rst_hard.pack(**button_pack_args)
-        self.frontend_rst.pack(**button_pack_args)
-        self.current.pack(**button_pack_args)
-        self.temps.pack(**button_pack_args)
         self.be_sgl_rate_rd.pack(**button_pack_args)
         self.be_tt_rate_rd.pack(**button_pack_args)
         self.be_cmd_rate_rd.pack(**button_pack_args)
 
         Separator(self.command_frame).pack(fill = tk.X, padx = 60, pady = 30)
 
+        """ Frontend command buttons """
+
+        self.frontend_rst = tk.Button(self.command_frame, text = "Frontend reset",
+                command = lambda: self.cmd_output_print(self.sys.frontend_reset()))
+        self.bias_rd = tk.Button(self.command_frame, text = "Read bias",
+                command = lambda: self.cmd_output_print(self.sys.get_bias()))
+        self.thresh_rd = tk.Button(self.command_frame, text = "Read thresh",
+                command = lambda: self.cmd_output_print(self.sys.get_thresh()))
+        self.period_rd = tk.Button(self.command_frame, text = "Read period", 
+                command = lambda: self.cmd_output_print(self.sys.get_period()))
+        self.sgl_rate_rd = tk.Button(self.command_frame, text = "Read frontend singles rate",
+                command = lambda: self.cmd_output_print(self.sys.get_all_singles_rates()))
+        self.det_disable = ToggleButton(self.command_frame, "Detector ON", "Detector OFF",
+                lambda s: self.cmd_output_print(self.sys.detector_disable(s)))
+
+        self.frontend_rst.pack(**button_pack_args)
         self.bias_rd.pack(**button_pack_args)
         self.thresh_rd.pack(**button_pack_args)
         self.period_rd.pack(**button_pack_args)
         self.sgl_rate_rd.pack(**button_pack_args)
-        self.tt_stall.pack(**button_pack_args)
         self.det_disable.pack(**button_pack_args)
 
         self.cmd_output = tk.Text(self.command_frame, height = 10, takefocus = False)
