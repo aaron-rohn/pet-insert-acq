@@ -50,7 +50,7 @@ class System():
         self.total_counts = 0
         for be in self.backend:
             with be.count_rate_queue.mutex:
-                be.count_rate_queue.clear()
+                be.count_rate_queue.queue.clear()
 
         self.detector_disable(True)
         time.sleep(1)

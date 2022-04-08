@@ -154,10 +154,6 @@ class Backend():
             self.gx.spi(cmd.rst_hard())
 
     @ignore_network_errors(None)
-    def flush(self):
-        self.gx.flush()
-
-    @ignore_network_errors(None)
     def set_network_led(self, clear = False):
         self.gx.send(cmd.backend_network_set(clear))
 

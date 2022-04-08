@@ -30,11 +30,12 @@ class Gigex():
         self.ip = ip
         self.sys = None
         self.lock = threading.Lock()
+        self.timeout = 0.1
 
     def __enter__(self):
         self.lock.acquire()
         self.sys = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sys.settimeout(0.1)
+        self.sys.settimeout(self.timeout)
 
         try:
             self.sys.connect((self.ip, Gigex.sys_port))
@@ -52,10 +53,10 @@ class Gigex():
         nwords_b = nwords_i.to_bytes(4,'big')
         data = b''.join([d.to_bytes(4,'big') for d in data])
 
-        # 8.75 MHz SPI access
+        # (35->0/17.5->1/8.75->2) MHz SPI access
         # 32 bit word length
         # release chip select
-        cmd_bytes = ((0xEE2120FF).to_bytes(4,'big') +
+        cmd_bytes = ((0xEE0120FF).to_bytes(4,'big') +
                 nwords_b + nwords_b + data)
 
         self.sys.send(cmd_bytes)
@@ -66,51 +67,54 @@ class Gigex():
 
         return (code == 0xEE) and (stat == 0), resp
 
-    def flush(self):
+    def _flush(self):
+        logging.debug(f'{self.ip}: flush connection')
+        self.sys.settimeout(0.0)
+        try:
+            self.sys.recv(1024)
+        except:
+            pass
+        self.sys.settimeout(self.timeout)
+
+    def _recv(self, ntrys = 5, wait = 100e-6):
+        for i in range(ntrys):
+            time.sleep(wait)
+            status, value = self.spi(0)
+
+            if not status:
+                raise GigexError("{self.ip}: Error reading SPI")
+
+            if cmd.is_command(value[0]):
+                logging.debug(f'{self.ip}: Read response {hex(value[0])} on try {i}')
+                return value[0]
+
+        raise GigexError("{self.ip} Failed to receive a nonzero value")
+
+    def _query(self, cmd_int):
+        logging.debug(f'{self.ip}: Send command {hex(cmd_int)}')
+        self.spi(cmd_int)
+        value = self._recv(wait = 10e-6)
+
+        if cmd.command(value) != cmd.CMD_RESPONSE:
+            return value
+
+        if cmd.payload(value) == 0:
+            raise ModuleNotPowered(f'{self.ip}: Channel {cmd.module(value)} is not powered')
+
+        return self._recv(wait = 10e-3)
+
+    def send(self, cmd_int, nsend_trys = 5):
         with self:
-            try:
-                logging.debug(f'{self.ip}: flush connection')
-                self.sys.recv(1024*10)
-            except TimeoutError:
-                pass
+            for send_trys in range(nsend_trys):
+                logging.debug(f'{self.ip}: Send attempt {send_trys+1}')
+                try:
+                    return self._query(cmd_int)
+                except GigexError as ge:
+                    logging.info(repr(ge))
 
-    def send(self, cmd_int):
-        with self:
-            for send_trys in range(5):
-                logging.debug(f'{self.ip} send attempt {send_trys+1}: {hex(cmd_int)}')
-                status, value = self.spi(cmd_int)
-
-                logging.debug(f'{self.ip}: read backend response')
-                status, value = self.spi(0)
-                logging.debug(f'{self.ip}: status is {status} and value is {[hex(v) for v in value]}')
-
-                # A reply command type of CMD_RESPONSE indicates that the command was forwarded to the frontend
-                if cmd.command(value[0]) != cmd.CMD_RESPONSE:
-                    # Backend returns a value directly
-                    logging.debug(f'{self.ip}: return backend value {hex(value[0])}\n')
-                    return value[0]
-
-                else:
-                    # The backend attempted to forward the command to the frontend
-
-                    channel = cmd.module(value[0])
-                    response = cmd.payload(value[0])
-
-                    if response == 0:
-                        # Backend indicates that the desired module is powered off
-                        raise ModuleNotPowered(f'{self.ip}: Channel {channel} is not powered')
-
-                    # Attempt to read back the response from the frontend
-                    for recv_trys in range(5):
-                        logging.debug(f'{self.ip}: attempt {recv_trys+1} to read back frontend command response on channel {channel}')
-                        status, value = self.spi(0)
-                        logging.debug(f'{self.ip}: status is {status} and value is {[hex(v) for v in value]}')
-
-                        if cmd.is_command(value[0]) & (cmd.command(value[0]) == cmd.command(cmd_int)):
-                            logging.debug(f'{self.ip}: return frontend value {hex(value[0])}\n')
-                            return value[0]
-
-        raise GigexError(f'{self.ip}: Did not receive a response to command: {hex(cmd_int)}')
+            self.spi(1)
+            self._flush()
+            raise GigexError("{self.ip}: Failed to receive response after {nsend_trys} trys")
 
     def reboot(self):
         with self:

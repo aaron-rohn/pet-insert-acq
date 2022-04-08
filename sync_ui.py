@@ -1,6 +1,7 @@
 import threading
 import tkinter as tk
 from sync import Sync
+from toggle_button import ToggleButton
 
 class SyncUI():
     def __init__(self, sync_instance, root):
@@ -18,6 +19,9 @@ class SyncUI():
                 text = "Align Time Tags", 
                 command = self.sync_reset)
 
+        self.air_tog = ToggleButton(self.frame,
+                "Air ON", "Air OFF", self.toggle_air)
+
     def pack(self):
         self.frame.pack(side = tk.TOP, anchor = tk.N,
                 padx = 10, pady = 10, fill = tk.X)
@@ -25,6 +29,10 @@ class SyncUI():
         self.label.pack(side = tk.LEFT, padx = 10, pady = 10)
         self.status_ind.pack(side = tk.LEFT, padx = 10, pady = 10)
         self.rst_button.pack(side = tk.LEFT, padx = 10, pady = 10)
+        self.air_tog.pack(side = tk.LEFT, padx = 10, pady = 10)
 
     def sync_reset(self):
         threading.Thread(target = self.sync.sync_reset).start()
+
+    def toggle_air(self, turn_on = False):
+        self.sync.set_dac(turn_on)

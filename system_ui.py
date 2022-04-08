@@ -138,17 +138,24 @@ class SystemUI():
     def start_acq(self):
         self.acq_start_button.config(state = tk.DISABLED)
         finished = threading.Event()
-        self.acq_start_time = datetime.now()
 
-        def acq_check_fun():
-            if finished.is_set():
-                self.acq_stop_button.config(state = tk.NORMAL)
-                self.statusbar_acq_handler(True)
-            else:
+        self.acq_start_time = datetime.now()
+        self.stop_updates = threading.Event()
+        def acq_update_fun():
+            # This function will run until the stop button is pressed
+            if not self.stop_updates.is_set():
                 tdiff = datetime.now() - self.acq_start_time
                 ncounts = self.sys.latest_counts()
                 self.acq_duration_label.config(text = f'Elapsed: {tdiff}')
                 self.acq_counts_label.config(text = f'Singles: {ncounts}')
+                self.root.after(100, acq_update_fun)
+
+        def acq_check_fun():
+            #This function will run until the acqsuision has sucessfully started
+            if finished.is_set():
+                self.acq_stop_button.config(state = tk.NORMAL)
+                self.statusbar_acq_handler(True)
+            else:
                 self.root.after(100, acq_check_fun)
 
         acq_start_thread = threading.Thread(
@@ -157,8 +164,10 @@ class SystemUI():
 
         acq_start_thread.start()
         acq_check_fun()
+        acq_update_fun()
 
     def stop_acq(self):
+        self.stop_updates.set()
         finished = threading.Event()
         self.acq_stop_button.config(state = tk.DISABLED)
         data_dir = tk.filedialog.askdirectory(
