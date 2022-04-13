@@ -56,7 +56,7 @@ class Gigex():
         # (35->0/17.5->1/8.75->2) MHz SPI access
         # 32 bit word length
         # release chip select
-        cmd_bytes = ((0xEE0120FF).to_bytes(4,'big') +
+        cmd_bytes = ((0xEE2120FF).to_bytes(4,'big') +
                 nwords_b + nwords_b + data)
 
         self.sys.send(cmd_bytes)
@@ -76,19 +76,22 @@ class Gigex():
             pass
         self.sys.settimeout(self.timeout)
 
-    def _recv(self, ntrys = 5, wait = 100e-6):
+    def _recv(self, cmd_type = None, ntrys = 5, wait = 100e-6):
         for i in range(ntrys):
             time.sleep(wait)
             status, value = self.spi(0)
 
             if not status:
-                raise GigexError("{self.ip}: Error reading SPI")
+                raise GigexError(f'{self.ip}: Error reading SPI')
 
-            if cmd.is_command(value[0]):
-                logging.debug(f'{self.ip}: Read response {hex(value[0])} on try {i}')
+            cmd_general  = cmd_type is None and cmd.is_command(value[0])
+            cmd_specific = cmd.command(value[0]) == cmd_type
+
+            if cmd_specific or cmd_general:
+                logging.debug(f'{self.ip}: Read response {hex(value[0])} on try {i+1}')
                 return value[0]
 
-        raise GigexError("{self.ip} Failed to receive a nonzero value")
+        raise GigexError(f'{self.ip}: Failed to receive a nonzero value')
 
     def _query(self, cmd_int):
         logging.debug(f'{self.ip}: Send command {hex(cmd_int)}')
@@ -101,26 +104,28 @@ class Gigex():
         if cmd.payload(value) == 0:
             raise ModuleNotPowered(f'{self.ip}: Channel {cmd.module(value)} is not powered')
 
-        return self._recv(wait = 10e-3)
+        cmd_type = cmd.command(cmd_int)
+        return self._recv(cmd_type = cmd_type, wait = 10e-3)
 
     def send(self, cmd_int, nsend_trys = 5):
         with self:
+            self._flush()
             for send_trys in range(nsend_trys):
                 logging.debug(f'{self.ip}: Send attempt {send_trys+1}')
                 try:
                     return self._query(cmd_int)
                 except GigexError as ge:
-                    logging.info(repr(ge))
+                    logging.debug(repr(ge))
 
             self.spi(1)
             self._flush()
-            raise GigexError("{self.ip}: Failed to receive response after {nsend_trys} trys")
+            raise GigexError(f'{self.ip}: Failed to receive response after {nsend_trys} trys')
 
     def reboot(self):
         with self:
             cmd_bytes = (0xF1000000).to_bytes(4,'big')
             self.sys.send(cmd_bytes)
-            resp = self.sys.recv(1024)
+            #resp = self.sys.recv(1024)
             # returns true on success
-            return resp[0] == 0xF1 and resp[1] == 0x00
+            #return resp[0] == 0xF1 and resp[1] == 0x00
 

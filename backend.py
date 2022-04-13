@@ -129,6 +129,7 @@ class Backend():
         while True:
             temps = self.get_all_temps()
             currs = self.get_current()
+            logging.info(f'{self.ip}: {currs}')
             self.ui_mon_queue.put_nowait((temps, currs))
             self.count_rate_queue.put(self.get_counter(0))
 
