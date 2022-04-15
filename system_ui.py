@@ -114,6 +114,10 @@ class SystemUI():
         self.sys.set_bias(val)
         self.statusbar_bias_handler(turn_on)
 
+    def reboot_gigex(self):
+        ret = [b.gx.reboot() for b in self.sys.backend]
+        logging.debug(f'Reboot gigex returned {ret}')
+
     def toggle_power(self, turn_on = False):
         nmodules = 4
         popup = PowerPopup(self.root, turn_on)
@@ -141,13 +145,19 @@ class SystemUI():
 
         self.acq_start_time = datetime.now()
         self.stop_updates = threading.Event()
+
         def acq_update_fun():
             # This function will run until the stop button is pressed
             if not self.stop_updates.is_set():
                 tdiff = datetime.now() - self.acq_start_time
-                ncounts = self.sys.latest_counts()
                 self.acq_duration_label.config(text = f'Elapsed: {tdiff}')
-                self.acq_counts_label.config(text = f'Singles: {ncounts}')
+
+                for be, labs in zip(self.sys.backend, self.acq_counts_labels):
+                    while not be.count_rate_queue.empty():
+                        cts = be.count_rate_queue.get()
+                        for ct, lab in zip(cts, labs):
+                            lab.config(text = f'{ct/1e6:,}M')
+
                 self.root.after(100, acq_update_fun)
 
         def acq_check_fun():
@@ -241,14 +251,21 @@ class SystemUI():
                 command = self.stop_acq, state = tk.DISABLED)
 
         self.acq_duration_label = tk.Label(self.acq_frame)
-        self.acq_counts_label = tk.Label(self.acq_frame)
 
         button_pack_args = {'fill': tk.X, 'side': tk.TOP, 'padx': 10, 'pady': 5}
 
         self.acq_start_button.pack(**button_pack_args)
         self.acq_stop_button.pack(**button_pack_args)
         self.acq_duration_label.pack(**button_pack_args)
-        self.acq_counts_label.pack(**button_pack_args)
+
+        self.acq_counts_frame = tk.Frame(self.acq_frame, relief = tk.GROOVE)
+        self.acq_counts_frame.pack(side = tk.TOP)
+        self.acq_counts_labels = []
+        for be in self.sys.backend:
+            frm = tk.Frame(self.acq_counts_frame)
+            self.acq_counts_labels.append([tk.Label(frm) for _ in range(4)])
+            frm.pack(side = tk.LEFT, padx = 40)
+            [lb.pack() for lb in self.acq_counts_labels[-1]]
 
         # Status page - sync element
 
@@ -277,6 +294,7 @@ class SystemUI():
         self.refresh = tk.Button(self.status_frame, text = "Refresh", command = self.get_status)
         self.pwr_tog = ToggleButton(self.status_frame, "Power ON", "Power OFF", self.toggle_power)
         self.bias_tog = ToggleButton(self.status_frame, "Bias ON", "Bias OFF", self.toggle_bias)
+        self.reboot_gigex_button = tk.Button(self.status_frame, text = "Reboot Gigex", command = self.reboot_gigex)
 
         self.power_rd = tk.Button(self.status_frame, text = "Read power state",
                 command = self.get_power)
@@ -288,6 +306,7 @@ class SystemUI():
         self.refresh.pack(**main_pack_args)
         self.pwr_tog.pack(**main_pack_args)
         self.bias_tog.pack(**main_pack_args)
+        self.reboot_gigex_button.pack(**main_pack_args)
         Separator(self.status_frame).pack(fill = tk.X, padx = 60, pady = 30)
         self.power_rd.pack(**main_pack_args)
         self.power_wr.pack(**main_pack_args)
@@ -296,10 +315,6 @@ class SystemUI():
 
         """ Backend command buttons """
 
-        self.backend_rst_soft = tk.Button(self.command_frame, text = "Backend reset soft",
-                command = lambda: self.cmd_output_print(self.sys.backend_reset_soft()))
-        self.backend_rst_hard = tk.Button(self.command_frame, text = "Backend reset hard",
-                command = lambda: self.cmd_output_print(self.sys.backend_reset_hard()))
         self.be_sgl_rate_rd = tk.Button(self.command_frame, text = "Read backend singles rate",
                 command = lambda: self.cmd_output_print(self.sys.get_counter(0)))
         self.be_tt_rate_rd  = tk.Button(self.command_frame, text = "Read backend time tag rate",
@@ -307,8 +322,6 @@ class SystemUI():
         self.be_cmd_rate_rd = tk.Button(self.command_frame, text = "Read backend command rate",
                 command = lambda: self.cmd_output_print(self.sys.get_counter(2)))
 
-        self.backend_rst_soft.pack(**button_pack_args)
-        self.backend_rst_hard.pack(**button_pack_args)
         self.be_sgl_rate_rd.pack(**button_pack_args)
         self.be_tt_rate_rd.pack(**button_pack_args)
         self.be_cmd_rate_rd.pack(**button_pack_args)
@@ -317,8 +330,6 @@ class SystemUI():
 
         """ Frontend command buttons """
 
-        self.frontend_rst = tk.Button(self.command_frame, text = "Frontend reset",
-                command = lambda: self.cmd_output_print(self.sys.frontend_reset()))
         self.bias_rd = tk.Button(self.command_frame, text = "Read bias",
                 command = lambda: self.cmd_output_print(self.sys.get_bias()))
         self.thresh_rd = tk.Button(self.command_frame, text = "Read thresh",
@@ -330,7 +341,6 @@ class SystemUI():
         self.det_disable = ToggleButton(self.command_frame, "Detector ON", "Detector OFF",
                 lambda s: self.cmd_output_print(self.sys.detector_disable(s)))
 
-        self.frontend_rst.pack(**button_pack_args)
         self.bias_rd.pack(**button_pack_args)
         self.thresh_rd.pack(**button_pack_args)
         self.period_rd.pack(**button_pack_args)

@@ -1,4 +1,4 @@
-import socket, logging, threading, queue
+import socket, logging, threading, queue, time
 import command as cmd
 from gigex import Gigex, ignore_network_errors
 from frontend import Frontend
@@ -9,39 +9,38 @@ class BackendAcq:
     def __init__(self, ip, stop):
         self.ip = ip
         self.stop = stop
+        self.s = None
 
     def __enter__(self):
+        self.try_connect()
+        return self
+
+    def __exit__(self, *context):
+        self.s.close()
+
+    def __iter__(self):
+        while not self.stop.is_set():
+            try:
+                yield self.s.recv(4096)
+            except TimeoutError:
+                yield b''
+            except:
+                self.try_connect()
+                yield b''
+
+    def try_connect(self):
+        if self.s is not None:
+            time.sleep(1)
+            self.s.close()
+
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.s.settimeout(1)
 
         try:
             self.s.connect((self.ip, data_port))
             logging.debug(f'{self.ip}: Acquisition connected')
-        except (OSError, TimeoutError, ConnectionError):
-            logging.warning(f'{self.ip}: Acquisition failed')
-            self.s = None
-
-        return self
-
-    def __exit__(self, *context):
-        if self.s is not None:
-            logging.debug(f'{self.ip}: Stop acquisition')
-            self.s.close()
-
-    def __iter__(self):
-        if self.s is None:
-            return
-        
-        logging.debug(f'{self.ip}: Acquisition started')
-
-        while not self.stop.is_set():
-            try:
-                yield self.s.recv(4096)
-            except TimeoutError:
-                yield b''
-            except Exception as e:
-                logging.warning(f'{self.ip}: Failed to receive data, {repr(e)}')
-                yield b''
+        except Exception as e:
+            logging.debug(f'{self.ip}: Acquisition failed to connect, {repr(e)}')
 
 def acquire(ip, stop, sink, running = None):
     if running is None:
@@ -127,11 +126,15 @@ class Backend():
 
     def mon(self, interval = 10.0):
         while True:
+            if not self.get_status():
+                self.gx.reboot()
+                logging.info(f'{self.ip}: reboot gigex')
+
             temps = self.get_all_temps()
             currs = self.get_current()
-            logging.info(f'{self.ip}: {currs}')
             self.ui_mon_queue.put_nowait((temps, currs))
             self.count_rate_queue.put(self.get_counter(0))
+            logging.info(f'{self.ip}: {currs}')
 
             if self.exit.wait(interval):
                 break

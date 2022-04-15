@@ -121,11 +121,11 @@ class Gigex():
             self._flush()
             raise GigexError(f'{self.ip}: Failed to receive response after {nsend_trys} trys')
 
+    @ignore_network_errors(False)
     def reboot(self):
         with self:
             cmd_bytes = (0xF1000000).to_bytes(4,'big')
             self.sys.send(cmd_bytes)
-            #resp = self.sys.recv(1024)
-            # returns true on success
-            #return resp[0] == 0xF1 and resp[1] == 0x00
+            resp = self.sys.recv(1024)
+            return resp[0] == 0xF1 and resp[1] == 0x00
 
