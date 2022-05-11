@@ -10,6 +10,7 @@ class BackendAcq:
         self.ip = ip
         self.stop = stop
         self.s = None
+        self.timeout = 5
 
     def __enter__(self):
         self.try_connect()
@@ -22,19 +23,17 @@ class BackendAcq:
         while not self.stop.is_set():
             try:
                 yield self.s.recv(4096)
-            except TimeoutError:
-                yield b''
-            except:
+            except Exception as e:
                 self.try_connect()
                 yield b''
 
     def try_connect(self):
         if self.s is not None:
-            time.sleep(1)
+            time.sleep(self.timeout)
             self.s.close()
 
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.s.settimeout(1)
+        self.s.settimeout(self.timeout)
 
         try:
             self.s.connect((self.ip, data_port))
