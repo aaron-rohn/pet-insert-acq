@@ -7,7 +7,7 @@ class System():
     def __init__(self):
         self.sync = Sync('192.168.1.100')
         backend_ips = ['192.168.1.101', '192.168.1.102', '192.168.2.103', '192.168.2.104']
-        self.data_dirs = ['/opt/acq1', '/opt/acq2']
+        self.data_dir = '/opt/acq'
         self.backend = [Backend(a) for a in backend_ips]
 
     def __getattr__(self, attr):
@@ -45,11 +45,7 @@ class System():
         time.sleep(1)
 
         for be in self.backend:
-            # X.X.1.X -> /opt/acq1, X.X.2.X -> /opt/acq2
-            ip = be.ip
-            idx = int(ip.split('.')[2]) - 1
-            fname = os.path.join(self.data_dirs[idx], ip + '.SGL')
-
+            fname = os.path.join(self.data_dir, be.ip + '.SGL')
             running = threading.Event()
             be.put((fname, running))
             running.wait()
@@ -65,11 +61,8 @@ class System():
             be.put((be.ui_data_queue,))
 
         if data_dir:
-            sgl_files = []
-            for d in self.data_dirs:
-                new_files = glob.glob('*.SGL', root_dir = d)
-                new_files = [os.path.join(d, f) for f in new_files]
-                sgl_files += new_files
+            sgl_files = glob.glob('*.SGL', root_dir = self.data_dir)
+            sgl_files = [os.path.join(self.data_dir, f) for f in new_files]
 
             try:
                 for f in sgl_files:
