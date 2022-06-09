@@ -109,7 +109,6 @@ class SystemUI():
             tk.messagebox.showerror(message = "Error setting power states")
 
     def toggle_bias(self, turn_on = False):
-        # TODO move to background thread
         val = BIAS_ON if turn_on else BIAS_OFF
         self.sys.set_bias(val)
         self.statusbar_bias_handler(turn_on)

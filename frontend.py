@@ -1,4 +1,4 @@
-import command, math, logging
+import command, math, logging, time
 from gigex import GigexError, ignore_network_errors
 
 BIAS_ON  = 29.5

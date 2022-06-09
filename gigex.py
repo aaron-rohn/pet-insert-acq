@@ -127,5 +127,7 @@ class Gigex():
             cmd_bytes = (0xF1000000).to_bytes(4,'big')
             self.sys.send(cmd_bytes)
             resp = self.sys.recv(1024)
-            return resp[0] == 0xF1 and resp[1] == 0x00
+            good = (resp[0] == 0xF1 and resp[1] == 0x00)
+            logging.info(f'Reboot result {self.ip}: {good}')
+            return good
 

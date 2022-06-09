@@ -44,12 +44,15 @@ class System():
         self.detector_disable(True)
         time.sleep(1)
 
+        running = []
+
         for be in self.backend:
             fname = os.path.join(self.data_dir, be.ip + '.SGL')
-            running = threading.Event()
-            be.put((fname, running))
-            running.wait()
+            r = threading.Event()
+            be.put((fname, r))
+            all_running.append(r)
 
+        [r.wait() for r in running]
         self.sync.sync_reset()
         self.detector_disable(False)
         finished.set()
@@ -62,7 +65,7 @@ class System():
 
         if data_dir:
             sgl_files = glob.glob('*.SGL', root_dir = self.data_dir)
-            sgl_files = [os.path.join(self.data_dir, f) for f in new_files]
+            sgl_files = [os.path.join(self.data_dir, f) for f in sgl_files]
 
             try:
                 for f in sgl_files:

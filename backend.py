@@ -2,22 +2,36 @@ import socket, logging, threading, queue, time
 import command as cmd
 from gigex import Gigex, ignore_network_errors
 from frontend import Frontend
+from datetime import datetime
 
 data_port = 5555
+
+log = logging.getLogger("monitor")
+fhandle = logging.FileHandler("/opt/acq/monitor.log")
+log.addHandler(fhandle)
+log.setLevel(logging.INFO)
+log.propagate = False
 
 class BackendAcq:
     def __init__(self, ip, stop):
         self.ip = ip
         self.stop = stop
-        self.s = None
         self.timeout = 5
+        self.s = None
 
-    def __enter__(self):
-        self.try_connect()
-        return self
+    def try_connect(self):
+        if isinstance(self.s, socket.socket):
+            self.s.close()
 
-    def __exit__(self, *context):
-        self.s.close()
+        try:
+            self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.s.settimeout(self.timeout)
+            self.s.connect((self.ip, data_port))
+            logging.debug(f'{self.ip}: Acquisition connected')
+        except Exception as e:
+            self.s = None
+            logging.info(f'{self.ip}: Acquisition failed to connect, {e}')
+            time.sleep(self.timeout)
 
     def __iter__(self):
         while not self.stop.is_set():
@@ -27,39 +41,25 @@ class BackendAcq:
                 self.try_connect()
                 yield b''
 
-    def try_connect(self):
-        if self.s is not None:
-            time.sleep(self.timeout)
-            self.s.close()
-
-        self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.s.settimeout(self.timeout)
-
-        try:
-            self.s.connect((self.ip, data_port))
-            logging.debug(f'{self.ip}: Acquisition connected')
-        except Exception as e:
-            logging.debug(f'{self.ip}: Acquisition failed to connect, {repr(e)}')
-
 def acquire(ip, stop, sink, running = None):
     if running is None:
         running = threading.Event()
 
-    with BackendAcq(ip, stop) as acq_inst:
-        if isinstance(sink, str):
-            logging.debug(f'Create new ACQ worker thread to {sink}')
-            with open(sink, 'wb') as f:
-                running.set()
-                for d in acq_inst:
-                    f.write(d)
+    acq_inst = BackendAcq(ip, stop)
+    running.set()
 
-        else:
-            logging.debug(f'Create new ACQ worker thread to UI')
-            running.set()
+    if isinstance(sink, str):
+        logging.debug(f'Create new ACQ worker thread to {sink}')
+        with open(sink, 'wb') as f:
             for d in acq_inst:
-                try:
-                    sink.put_nowait(d)
-                except queue.Full: pass
+                f.write(d)
+
+    else:
+        logging.debug(f'Create new ACQ worker thread to UI')
+        for d in acq_inst:
+            try:
+                sink.put_nowait(d)
+            except queue.Full: pass
 
 class Backend():
     def __getattr__(self, attr):
@@ -128,17 +128,19 @@ class Backend():
             if not self.get_status():
                 self.gx.reboot()
                 logging.info(f'{self.ip}: reboot gigex')
+                time.sleep(interval)
+            else:
+                temps = self.get_all_temps()
+                currs = self.get_current()
+                self.ui_mon_queue.put_nowait((temps, currs))
+                self.count_rate_queue.put(self.get_counter(0))
 
-            temps = self.get_all_temps()
-            currs = self.get_current()
-            self.ui_mon_queue.put_nowait((temps, currs))
-            self.count_rate_queue.put(self.get_counter(0))
-            logging.info(f'{self.ip}: {currs}')
+                now = datetime.now()
+                log.info(f'{self.ip} {now} current: {currs}')
+                log.info(f'{self.ip} {now} temperature: {temps}')
 
             if self.exit.wait(interval):
-                break
-
-        logging.debug("Exit monitor thread")
+                return
 
     def put(self, val):
         self.dest.put(val)
