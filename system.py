@@ -15,7 +15,7 @@ class System():
 
     def __enter__(self):
         self.sync.set_network_led(clear = False)
-        self.set_network_led(clear = False)
+        #self.set_network_led(clear = False)
         with ExitStack() as stack:
             [stack.enter_context(b) for b in self.backend]
             self._stack = stack.pop_all()
@@ -23,7 +23,7 @@ class System():
     
     def __exit__(self, *context):
         self.sync.set_network_led(clear = True)
-        self.set_network_led(clear = True)
+        #self.set_network_led(clear = True)
         self._stack.__exit__(self, *context)
 
     def set_power(self, states = [[False]*4]*4):
@@ -50,7 +50,7 @@ class System():
             fname = os.path.join(self.data_dir, be.ip + '.SGL')
             r = threading.Event()
             be.put((fname, r))
-            all_running.append(r)
+            running.append(r)
 
         [r.wait() for r in running]
         self.sync.sync_reset()
@@ -69,8 +69,7 @@ class System():
 
             try:
                 for f in sgl_files:
-                    shutil.copy(f, data_dir)
-                    os.remove(f)
+                    shutil.move(f, data_dir)
             except PermissionError as e:
                 logging.warning('Failed to move acquition files',
                         exc_info = e)

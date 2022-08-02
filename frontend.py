@@ -1,7 +1,8 @@
 import command, math, logging, time
 from gigex import GigexError, ignore_network_errors
 
-BIAS_ON  = 29.5
+#BIAS_ON  = 29.5
+BIAS_ON  = 10.0
 BIAS_OFF = 0.0
 NDIGITS = 2
 

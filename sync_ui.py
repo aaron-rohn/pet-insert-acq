@@ -35,4 +35,7 @@ class SyncUI():
         threading.Thread(target = self.sync.sync_reset).start()
 
     def toggle_air(self, turn_on = False):
-        self.sync.set_dac(turn_on)
+        if turn_on:
+            self.sync.track_temp_start()
+        else:
+            self.sync.track_temp_stop()

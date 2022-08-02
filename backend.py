@@ -6,11 +6,11 @@ from datetime import datetime
 
 data_port = 5555
 
-log = logging.getLogger("monitor")
+monitor_log = logging.getLogger("monitor")
 fhandle = logging.FileHandler("/opt/acq/monitor.log")
-log.addHandler(fhandle)
-log.setLevel(logging.INFO)
-log.propagate = False
+monitor_log.addHandler(fhandle)
+monitor_log.setLevel(logging.INFO)
+monitor_log.propagate = False
 
 class BackendAcq:
     def __init__(self, ip, stop):
@@ -30,7 +30,7 @@ class BackendAcq:
             logging.debug(f'{self.ip}: Acquisition connected')
         except Exception as e:
             self.s = None
-            logging.info(f'{self.ip}: Acquisition failed to connect, {e}')
+            logging.debug(f'{self.ip}: Acquisition failed to connect, {e}')
             time.sleep(self.timeout)
 
     def __iter__(self):
@@ -128,16 +128,18 @@ class Backend():
             if not self.get_status():
                 self.gx.reboot()
                 logging.info(f'{self.ip}: reboot gigex')
-                time.sleep(interval)
             else:
                 temps = self.get_all_temps()
                 currs = self.get_current()
+                sgls  = self.get_counter(0)
+
                 self.ui_mon_queue.put_nowait((temps, currs))
-                self.count_rate_queue.put(self.get_counter(0))
+                self.count_rate_queue.put(sgls)
 
                 now = datetime.now()
-                log.info(f'{self.ip} {now} current: {currs}')
-                log.info(f'{self.ip} {now} temperature: {temps}')
+                monitor_log.info(f'{self.ip} {now} current: {currs}')
+                monitor_log.info(f'{self.ip} {now} temperature: {temps}')
+                monitor_log.info(f'{self.ip} {now} singles: {sgls}')
 
             if self.exit.wait(interval):
                 return
@@ -158,9 +160,11 @@ class Backend():
         with self.gx:
             self.gx.spi(cmd.rst_hard())
 
+    """
     @ignore_network_errors(None)
     def set_network_led(self, clear = False):
         self.gx.send(cmd.backend_network_set(clear))
+    """
 
     @ignore_network_errors(False)
     def get_status(self):

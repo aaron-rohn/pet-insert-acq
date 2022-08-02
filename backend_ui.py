@@ -1,6 +1,7 @@
 import queue
 import tkinter as tk
 from frontend_ui import FrontendUI
+from frontend import temp_channels
 
 class BackendUI():
     def __init__(self, backend_instance, status_frame, acq_frame):
@@ -34,6 +35,7 @@ class BackendUI():
             fe = self.backend.frontend[i]
             self.frontend.append(FrontendUI(fe, self.m_frame[-1]))
 
+        self.temps = [-1]
         self.check_mon_queue()
         self.check_data_queue()
 
@@ -55,8 +57,9 @@ class BackendUI():
                     self.check_mon_queue)
 
         try:
-            temps, currs = self.backend.ui_mon_queue.get_nowait()
-            for fe, t, c in zip(self.frontend, temps, currs):
+            self.temps, currs = self.backend.ui_mon_queue.get_nowait()
+
+            for fe, t, c in zip(self.frontend, self.temps, currs):
                 fe.set_all_temps(t)
                 fe.set_current(c)
         except queue.Empty: pass

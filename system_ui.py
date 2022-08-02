@@ -3,11 +3,14 @@ import tkinter.filedialog
 import tkinter as tk
 from datetime import datetime, timedelta
 from tkinter.ttk import Separator, Notebook
+
 from frontend import BIAS_ON, BIAS_OFF
 from system import System
 from sync_ui import SyncUI
 from backend_ui import BackendUI
 from toggle_button import ToggleButton
+
+from backend import monitor_log
 
 class PowerPopup(tk.Toplevel):
     def __init__(self, root, turn_on):
@@ -93,6 +96,11 @@ class SystemUI():
         stat_thread.start()
         status_check()
 
+    def temp_monitor(self):
+        self.root.after(10000, self.temp_monitor)
+        vals = [b.temps for b in self.backend]
+        self.sync.sync.temp_queue.put(vals)
+
     def get_power(self):
         # TODO move to background thread
         states_in = self.sys.get_power()
@@ -142,7 +150,7 @@ class SystemUI():
         self.acq_start_button.config(state = tk.DISABLED)
         finished = threading.Event()
 
-        self.acq_start_time = datetime.now()
+        self.acq_start_time = None
         self.stop_updates = threading.Event()
 
         def acq_update_fun():
@@ -155,7 +163,7 @@ class SystemUI():
                     while not be.count_rate_queue.empty():
                         cts = be.count_rate_queue.get()
                         for ct, lab in zip(cts, labs):
-                            lab.config(text = f'{ct/1e6:,}M')
+                            lab.config(text = f'{round(ct/1e3):,}K')
 
                 self.root.after(100, acq_update_fun)
 
@@ -164,6 +172,12 @@ class SystemUI():
             if finished.is_set():
                 self.acq_stop_button.config(state = tk.NORMAL)
                 self.statusbar_acq_handler(True)
+
+                # record the acq start and begin status update checking
+                self.acq_start_time = datetime.now()
+                monitor_log.info(f'begin acq at {self.acq_start_time}')
+                acq_update_fun()
+
             else:
                 self.root.after(100, acq_check_fun)
 
@@ -173,7 +187,6 @@ class SystemUI():
 
         acq_start_thread.start()
         acq_check_fun()
-        acq_update_fun()
 
     def stop_acq(self):
         self.stop_updates.set()
@@ -187,6 +200,7 @@ class SystemUI():
             if finished.is_set():
                 self.acq_start_button.config(state = tk.NORMAL)
                 self.statusbar_acq_handler(False)
+                monitor_log.info(f'end acq at {datetime.now()}')
             else:
                 self.root.after(100, acq_check_fun)
 
@@ -350,6 +364,7 @@ class SystemUI():
         self.cmd_output.pack(**button_pack_args)
 
         self.get_status()
+        self.temp_monitor()
 
 if __name__ == "__main__":
     logging.basicConfig(level = logging.INFO)
