@@ -68,28 +68,28 @@ class Sync():
 
     def track_temp(self, temp_setpoint = 18.0):
         pid = PID(-0.2, -0.01, -0.01,
-                setpoint = 18.0,
+                setpoint = temp_setpoint,
                 sample_time = 10,
-                output_limits = (0,1))
-        pid.sample_time = 10
+                output_limits = (0.2, 0.8))
 
-        u = 0.5
-        set_air_ljm(u)
+        set_air_ljm(0.5)
 
         while True:
             temps = self.temp_queue.get()
             if temps is None: break
 
             temps = np.array(temps).flat
-            temps = temps[temps != -1].tolist()
+            temps = temps[temps > 0].tolist()
 
             try:
                 avg = sum(temps) / len(temps)
             except ZeroDivisionError:
                 # no temp was measured
-                logging.info(f'no temperatures were measured')
+                logging.debug(f'no temperatures were measured')
                 continue
 
             u = pid(avg)
-            logging.info(f'measured average tmp {round(avg,3)}, {round(u,3)}')
+            logging.debug(f'measured average tmp {round(avg,3)}, u = {round(u,3)}')
             set_air_ljm(u)
+
+        set_air_ljm(0.0)

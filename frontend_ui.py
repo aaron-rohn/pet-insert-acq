@@ -1,8 +1,8 @@
 import tkinter as tk
 from toggle_button import ToggleButton
 
-def scale_value(value, minrange, maxrange):
-    if value < 0: return 'black'
+def scale_value(value, minrange, maxrange, invalid_thr = 0):
+    if value < invalid_thr: return 'black'
 
     if value < minrange:
         g = 0xFF
@@ -43,5 +43,5 @@ class FrontendUI():
             ind.config(bg = col)
 
     def set_current(self, curr):
-        col = scale_value(curr, 600, 800)
+        col = scale_value(curr, 600, 900, 10)
         self.current_ind.config(bg = col)
