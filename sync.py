@@ -2,6 +2,7 @@ import command, threading, queue, logging
 from gigex import Gigex, ignore_network_errors
 import numpy as np
 from labjack import ljm
+from simple_pid import PID
 
 
 def set_air_ljm(value):
@@ -66,16 +67,13 @@ class Sync():
         self.temp_thread = None
 
     def track_temp(self, temp_setpoint = 18.0):
-        fullscale = 1.0
-        kp = fullscale*0.02
-        ki = fullscale*0.01
-        kd = fullscale*0.00
+        pid = PID(-0.2, -0.01, -0.01,
+                setpoint = 18.0,
+                sample_time = 10,
+                output_limits = (0,1))
+        pid.sample_time = 10
 
-        e_sum = 0
-        e_last = None
-
-        # start the control loop with max cooling
-        u = fullscale
+        u = 0.5
         set_air_ljm(u)
 
         while True:
@@ -87,29 +85,11 @@ class Sync():
 
             try:
                 avg = sum(temps) / len(temps)
-                logging.info(f'measured average tmp {avg} at set value {hex(u)}')
             except ZeroDivisionError:
                 # no temp was measured
                 logging.info(f'no temperatures were measured')
                 continue
 
-            e = avg - temp_setpoint
-
-            p = kp * e
-
-            e_sum += e
-            i = ki * e_sum 
-
-            d = kd * (0 if e_last is None else e - e_last)
-            e_last = e
-
-            logging.info(f'p: {int(p)}, i: {int(i)}, d: {int(d)}')
-
-            u += (p + i + d)
-            u = int(max(0, min(u, fullscale)))
-
-            logging.info(f'set u to {u}')
-
+            u = pid(avg)
+            logging.info(f'measured average tmp {round(avg,3)}, {round(u,3)}')
             set_air_ljm(u)
-
-        set_air_ljm(0.0)
