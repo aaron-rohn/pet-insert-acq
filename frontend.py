@@ -1,5 +1,5 @@
 import command, math, logging, time
-from gigex import GigexError, ignore_network_errors
+from gigex import ignore_network_errors
 
 BIAS_ON  = 29.5
 #BIAS_ON  = 10.0
@@ -29,6 +29,7 @@ def thresh_to_hex(voltage):
     return int(voltage * 20.4 / 2.5 * 0xFFF)
 
 def hex_to_bias(hex_val):
+    if hex_val < 0: return hex_val
     val = float(hex_val) * 13.0 * 2.5 / 0xFFF / 1.0075
     return round(val, NDIGITS)
 
@@ -71,22 +72,33 @@ class Frontend():
         self.backend = backend_instance
         self.index = index
 
-    @ignore_network_errors([-1]*4)
     def set_bias(self, value = 0.0):
-        return [hex_to_bias(self.set_dac(True, i, value)) for i in range(4)]
+        values = []
+        # iterate over four blocks
+        for i in range(4):
+            # try setting bias 5 times
+            for _ in range(5):
+                val = hex_to_bias(self.set_dac(True, i, value))
+                if (value - 0.1) < val < (value + 0.1): break
+            values.append(val)
+        return values
 
-    @ignore_network_errors([-1]*4)
     def get_bias(self):
         return [hex_to_bias(self.get_dac(True, i)) for i in range(4)]
 
-    @ignore_network_errors([-1]*4)
     def set_thresh(self, value = 0.05):
-        return [hex_to_thresh(self.set_dac(False, i, value)) for i in range(4)]
+        values = []
+        for i in range(4):
+            for _ in range(5):
+                val = hex_to_thresh(self.set_dac(False, i, value))
+                if (value - 0.01) < val < (value + 0.01): break
+            values.append(val)
+        return values
 
-    @ignore_network_errors([-1]*4)
     def get_thresh(self):
         return [hex_to_thresh(self.get_dac(False, i)) for i in range(4)]
 
+    @ignore_network_errors(-1)
     def set_dac(self, is_bias, block, value):
         ch, val = ((  bias_ch[block],   bias_to_hex(value)) if is_bias else
                    (thresh_ch[block], thresh_to_hex(value)))
@@ -95,6 +107,7 @@ class Frontend():
         ret = self.backend.gx.send(cmd)
         return command.payload(ret)
 
+    @ignore_network_errors(-1)
     def get_dac(self, is_bias, block):
         ch = bias_ch[block] if is_bias else thresh_ch[block]
         cmd = command.dac_read(self.index, ch)

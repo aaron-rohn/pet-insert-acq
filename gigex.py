@@ -13,14 +13,13 @@ def ignore_network_errors(default_return):
         def safe_fun(*args, **kwds):
             try:
                 return unsafe(*args, **kwds)
-
             except ModuleNotPowered as e:
                 logging.debug(f'{repr(e)}')
-                return default_return
-
             except NetworkErrors as e:
                 logging.debug('', exc_info = 1)
-                return default_return
+            except Exception as e:
+                logging.warn('Caught unknown exception', exc_info = 1)
+            return default_return
 
         return safe_fun
     return wrap
@@ -46,7 +45,7 @@ def connect(s, ip, port, timeout):
         logging.info(f'{ip}: Failed to connect to port {port}, {e}')
     return s
 
-def handle(s, cmd_int):
+def handle_single(s, cmd_int):
     cmd_bytes = cmd_int.to_bytes(4,'big')
     s.send(cmd_bytes)
     resp_bytes = s.recv(4)
@@ -65,28 +64,29 @@ def handle(s, cmd_int):
         resp_int = int.from_bytes(resp_bytes, 'big')
         return resp_int
 
+def handle(s, cmd_int):
+    for _ in range(5):
+        flush(s)
+        try:
+            return s, handle_single(s, cmd_int)
+        except TimeoutError:
+            pass
+        except Exception as e:
+            s = connect(s, ip, cmd_port, timeout)
+            return s, e
+
+    return s, TimeoutError(f'Timeout sending command {hex(cmd_int)}')
+
 def run(ip, queue_in, queue_out):
     timeout = 0.1
     s = connect(None, ip, cmd_port, timeout)
     while True:
         cmd_int = queue_in.get()
-        if cmd_int is None: break
 
-        for _ in range(5):
-            flush(s)
-            try:
-                response = handle(s, cmd_int)
-
-            except TimeoutError as e:
-                response = e
-                continue
-
-            except Exception as e:
-                response = e
-                s = connect(s, ip, cmd_port, timeout)
-
+        if cmd_int is None:
             break
 
+        s, response = handle(s, cmd_int)
         queue_out.put(response)
 
     s.close()
