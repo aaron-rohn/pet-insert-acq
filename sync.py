@@ -26,6 +26,14 @@ class Sync():
         self.temp_thread = None
         self.temp_queue = queue.Queue()
 
+    def __enter__(self):
+        self.gx.start()
+        self.set_network_led(clear = False)
+
+    def __exit__(self, *context):
+        self.set_network_led(clear = True)
+        self.gx.stop()
+
     @ignore_network_errors(None)
     def set_network_led(self, clear = False):
         cmd = command.backend_network_set(clear)

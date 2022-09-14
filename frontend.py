@@ -101,24 +101,13 @@ class Frontend():
         ret = self.backend.gx.send(cmd)
         return command.payload(ret)
 
+    @ignore_network_errors(-1)
     def get_temp(self, adc_ch):
         cmd = command.adc_read(self.index, adc_ch)
-
-        try:
-            ret = self.backend.gx.send(cmd)
-        except GigexError as e:
-            # TODO see if GigexError is ever actually raised
-            logging.error(repr(e))
-            ret = -1
-
+        ret = self.backend.gx.send(cmd)
         return adc_to_temp(ret)
 
-    @ignore_network_errors([-1]*len(temp_channels))
     def get_all_temps(self):
-        """ Temperature checking quits as soon as a network error is 
-        encountered, but will continue if a GigexError is encountered,
-        since it's handled specifically by the get_temp method
-        """
         return [self.get_temp(ch) for ch in temp_channels.values()]
 
     @ignore_network_errors(-1)

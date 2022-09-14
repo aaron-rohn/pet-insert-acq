@@ -148,23 +148,15 @@ class SystemUI():
 
     def start_acq(self):
         self.acq_start_button.config(state = tk.DISABLED)
-        finished = threading.Event()
-
         self.acq_start_time = None
         self.stop_updates = threading.Event()
+        finished = threading.Event()
 
         def acq_update_fun():
             # This function will run until the stop button is pressed
             if not self.stop_updates.is_set():
                 tdiff = datetime.now() - self.acq_start_time
                 self.acq_duration_label.config(text = f'Elapsed: {tdiff}')
-
-                for be, labs in zip(self.sys.backend, self.acq_counts_labels):
-                    while not be.count_rate_queue.empty():
-                        cts = be.count_rate_queue.get()
-                        for ct, lab in zip(cts, labs):
-                            lab.config(text = f'{round(ct/1e3):,}K')
-
                 self.root.after(100, acq_update_fun)
 
         def acq_check_fun():
@@ -270,15 +262,8 @@ class SystemUI():
         self.acq_start_button.pack(**button_pack_args)
         self.acq_stop_button.pack(**button_pack_args)
         self.acq_duration_label.pack(**button_pack_args)
-
         self.acq_counts_frame = tk.Frame(self.acq_frame, relief = tk.GROOVE)
         self.acq_counts_frame.pack(side = tk.TOP)
-        self.acq_counts_labels = []
-        for be in self.sys.backend:
-            frm = tk.Frame(self.acq_counts_frame)
-            self.acq_counts_labels.append([tk.Label(frm) for _ in range(4)])
-            frm.pack(side = tk.LEFT, padx = 40)
-            [lb.pack() for lb in self.acq_counts_labels[-1]]
 
         # Status page - sync element
 
@@ -293,7 +278,7 @@ class SystemUI():
 
         self.backend = []
         for be in self.sys.backend:
-            bnew = BackendUI(be, self.backend_tabs, self.acq_frame)
+            bnew = BackendUI(be, self.backend_tabs, self.acq_frame, self.acq_counts_frame)
             self.backend.append(bnew)
             bnew.pack()
 

@@ -4,13 +4,16 @@ from frontend_ui import FrontendUI
 from frontend import temp_channels
 
 class BackendUI():
-    def __init__(self, backend_instance, status_frame, acq_frame):
+    def __init__(self, backend_instance, status_frame, acq_frame, acq_counts_frame):
         self.backend = backend_instance
         self.status_frame = tk.Frame(status_frame)
 
         self.ui_data_interval_ms = 100
         self.ui_mon_interval_ms = 1000
         self.data = tk.Text(acq_frame, height = 4, takefocus = False)
+
+        self.count_label_frame= tk.Frame(acq_counts_frame)
+        self.acq_counts_labels = [tk.Label(self.count_label_frame) for _ in range(4)]
 
         # status indicator and label for backend
         self.common = tk.Frame(self.status_frame)
@@ -51,17 +54,24 @@ class BackendUI():
             fr.pack(fill = tk.BOTH, expand = True)
             cb.pack(side = tk.LEFT)
 
+        self.count_label_frame.pack(side = tk.LEFT, padx = 40)
+        [lb.pack() for lb in self.acq_counts_labels]
+
     def check_mon_queue(self):
         if not self.backend.exit.is_set():
             self.common.after(self.ui_mon_interval_ms,
                     self.check_mon_queue)
 
         try:
-            self.temps, currs = self.backend.ui_mon_queue.get_nowait()
+            self.temps, currs, cts = self.backend.ui_mon_queue.get_nowait()
 
             for fe, t, c in zip(self.frontend, self.temps, currs):
                 fe.set_all_temps(t)
                 fe.set_current(c)
+
+            for ct, lab in zip(cts, self.acq_counts_labels):
+                lab.config(text = f'{round(ct/1e3):,}K')
+
         except queue.Empty: pass
 
     def check_data_queue(self):

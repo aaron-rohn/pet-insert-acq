@@ -17,7 +17,7 @@ class BackendAcq:
     def __init__(self, ip, stop):
         self.ip = ip
         self.stop = stop
-        self.timeout = 5
+        self.timeout = 0.1
         self.s = None
 
     def try_connect(self):
@@ -37,7 +37,9 @@ class BackendAcq:
     def __iter__(self):
         while not self.stop.is_set():
             try:
-                yield self.s.recv(4096)
+                yield self.s.recv(8192)
+            except TimeoutError:
+                yield b''
             except Exception as e:
                 self.try_connect()
                 yield b''
@@ -73,31 +75,24 @@ class Backend():
 
         self.exit = threading.Event()
         self.dest = queue.Queue()
-        self.cv = threading.Condition()
 
-        self.count_rate_queue = queue.Queue()
         self.ui_mon_queue = queue.Queue()
         self.ui_data_queue = queue.Queue(maxsize = 10)
 
     def __enter__(self):
-        self.acq_management_thread = threading.Thread(
-                target = self.acq, daemon = False)
-        self.monitor_thread = threading.Thread(
-                target = self.mon, daemon = True)
-
-        self.exit.clear()
+        self.gx.start()
+        self.acq_management_thread = threading.Thread(target = self.acq)
+        self.monitor_thread = threading.Thread(target = self.mon)
         self.acq_management_thread.start()
         self.monitor_thread.start()
         return self
 
     def __exit__(self, *context):
         self.exit.set()
-
-        with self.cv:
-            self.cv.notify_all()
-
+        self.dest.put(None)
         self.monitor_thread.join()
         self.acq_management_thread.join()
+        self.gx.stop()
 
     def acq(self):
         acq_stop = threading.Event()
@@ -105,37 +100,26 @@ class Backend():
                 args = [self.ip, acq_stop, self.ui_data_queue])
         acq_thread.start()
 
-        with self.cv:
-            while True:
-                self.cv.wait_for(lambda: (self.exit.is_set() or
-                                          not self.dest.empty()))
+        while True:
+            vals = self.dest.get()
 
-                acq_stop.set()
-                acq_thread.join()
-                acq_stop.clear()
+            acq_stop.set()
+            acq_thread.join()
+            acq_stop.clear()
 
-                if self.exit.is_set(): break
-                vals = self.dest.get()
+            if vals is None: break
 
-                acq_thread = threading.Thread(target = acquire,
-                        args = [self.ip, acq_stop, *vals])
-
-                acq_thread.start()
-
-        logging.debug("Exit acq management thread")
+            acq_thread = threading.Thread(target = acquire,
+                    args = [self.ip, acq_stop, *vals])
+            acq_thread.start()
 
     def mon(self, interval = 10.0):
         while True:
-            if not self.get_status():
-                self.gx.reboot()
-                logging.info(f'{self.ip}: reboot gigex')
-            else:
+            if self.get_status():
                 temps = self.get_all_temps()
                 currs = self.get_current()
                 sgls  = self.get_counter(0)
-
-                self.ui_mon_queue.put_nowait((temps, currs))
-                self.count_rate_queue.put(sgls)
+                self.ui_mon_queue.put((temps, currs, sgls))
 
                 now = datetime.now()
                 monitor_log.info(f'{self.ip} {now} current: {currs}')
@@ -144,22 +128,6 @@ class Backend():
 
             if self.exit.wait(interval):
                 return
-
-    def put(self, val):
-        self.dest.put(val)
-        with self.cv:
-            self.cv.notify_all()
-
-    @ignore_network_errors(None)
-    def backend_reset_soft(self):
-        r1 = self.gx.send(cmd.rst_soft(clear = False))
-        r2 = self.gx.send(cmd.rst_soft(clear = True))
-        return (cmd.payload(r1) == 1) & (cmd.payload(r2) == 0)
-
-    @ignore_network_errors(None)
-    def backend_reset_hard(self):
-        with self.gx:
-            self.gx.spi(cmd.rst_hard())
 
     @ignore_network_errors(False)
     def get_status(self):
