@@ -138,6 +138,7 @@ class Gigex():
             try:
                 val = self.info_sock.recv(4)
                 if len(val) == 0: break
+                val = int.from_bytes(val, 'big')
                 self.info_queue.put((self.ip, val))
             except Exception as e:
                 with self.info_lock:

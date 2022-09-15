@@ -1,5 +1,5 @@
 import command, math, logging, time
-from gigex import ignore_network_errors
+from gigex import ignore_network_errors, ModuleNotPowered
 
 BIAS_ON  = 29.5
 #BIAS_ON  = 10.0
@@ -72,20 +72,26 @@ class Frontend():
         self.backend = backend_instance
         self.index = index
 
+    @ignore_network_errors([-1]*4)
     def set_bias(self, value = 0.0):
         values = []
         # iterate over four blocks
         for i in range(4):
             # try setting bias 5 times
-            for _ in range(5):
-                val = hex_to_bias(self.set_dac(True, i, value))
-                if (value - 0.1) < val < (value + 0.1): break
+            for j in range(5):
+                try:
+                    val = hex_to_bias(self.set_dac(True, i, value))
+                    if (value - 0.1) < val < (value + 0.1): break
+                except TimeoutError:
+                    if j == 4: raise
             values.append(val)
         return values
 
+    @ignore_network_errors([-1]*4)
     def get_bias(self):
         return [hex_to_bias(self.get_dac(True, i)) for i in range(4)]
 
+    @ignore_network_errors([-1]*4)
     def set_thresh(self, value = 0.05):
         values = []
         for i in range(4):
@@ -95,6 +101,7 @@ class Frontend():
             values.append(val)
         return values
 
+    @ignore_network_errors([-1]*4)
     def get_thresh(self):
         return [hex_to_thresh(self.get_dac(False, i)) for i in range(4)]
 
@@ -167,5 +174,11 @@ class Frontend():
     def detector_disable(self, disable = True):
         cmd = command.frontend_det_disable(
                 self.index, int(disable))
+        ret = self.backend.gx.send(cmd)
+        return command.payload(ret)
+
+    @ignore_network_errors(-1)
+    def set_frontend_otp(self, thr = 0x3DC):
+        cmd = command.frontend_otp_thresh(self.index, thr)
         ret = self.backend.gx.send(cmd)
         return command.payload(ret)

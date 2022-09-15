@@ -24,6 +24,7 @@ GET_CURRENT     = 0x5
 GPIO            = 0x6
 NOP             = 0x7
 COUNTER_READ    = 0xC
+UPDATE_REG      = 0xD
 
 CMD_RESPONSE    = 0xF
 
@@ -126,6 +127,10 @@ def backend_counter(module, channel):
     """
     return build(module, COUNTER_READ, channel)
 
+def backend_reg_update(otp = True, ocp = True, thr = 1500):
+    return build(0, UPDATE_REG,
+                 int(otp) << 13 | int(ocp) << 12 | thr & 0xFFF)
+
 # Frontend commands
 
 def dac_write(module, channel, value):
@@ -179,3 +184,6 @@ def frontend_det_disable(module, disable = 1):
             offset = 3,
             mask   = 1,
             value  = disable)
+
+def frontend_otp_thresh(m, thr):
+    return build(m, UPDATE_REG, (0xF << 16) | (thr & 0xFFFF))

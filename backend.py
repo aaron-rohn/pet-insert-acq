@@ -153,3 +153,11 @@ class Backend():
     def get_counter(self, ch):
         resp = [self.gx.send(cmd.backend_counter(m,ch)) for m in range(4)]
         return [cmd.payload(r) for r in resp]
+
+    @ignore_network_errors(None)
+    def set_backend_otp_ocp(self, value = True):
+        c = cmd.backend_reg_update(value,value)
+        resp = self.gx.send(c)
+        otp = bool((resp >> 13) & 0x1)
+        ocp = bool((resp >> 12) & 0x1)
+        return otp, ocp, resp & 0xFFF

@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from tkinter.ttk import Separator, Notebook
 
 import command as cmd
-from frontend import BIAS_ON, BIAS_OFF
+from frontend import BIAS_ON, BIAS_OFF, adc_to_temp
 from system import System
 from backend import monitor_log
 from sync_ui import SyncUI
@@ -105,11 +105,6 @@ class SystemUI():
 
         stat_thread.start()
         status_check()
-
-    def temp_monitor(self):
-        self.root.after(10000, self.temp_monitor)
-        vals = [b.temps for b in self.backend]
-        self.sync.sync.temp_queue.put(vals)
 
     def get_power(self):
         # TODO move to background thread
@@ -213,16 +208,24 @@ class SystemUI():
         acq_stop_thread.start()
         acq_check_fun()
 
+    # polled functions
+
+    def temp_monitor(self):
+        self.root.after(10000, self.temp_monitor)
+        vals = [b.temps for b in self.backend]
+        self.sync.sync.temp_queue.put(vals)
+
     def info(self):
         for be in self.sys.backend:
             try:
                 ip, val = be.gx.info_queue.get_nowait()
                 cmd_type = cmd.command(val)
                 cmd_module = cmd.module(val)
+                cmd_pld = cmd.payload(val)
                 if cmd_type == cmd.CMD_RESPONSE:
-                    message = f'{ip}: channel {cmd_module} over temperature ({hex(val)})'
+                    message = f'{ip}: Module {cmd_module} over temperature ({hex(val)})'
                 elif cmd_type == cmd.GET_CURRENT:
-                    message = f'{ip}: channel {cmd_module} over current ({hex(val)})'
+                    message = f'{ip}: Module {cmd_module} over current, {cmd_pld} mA ({hex(val)})'
                 else:
                     message = f'{ip}: reports {hex(val)}'
                 WarningPopup(self.root, message)
@@ -345,10 +348,13 @@ class SystemUI():
                 command = lambda: self.cmd_output_print(self.sys.get_counter(1)))
         self.be_cmd_rate_rd = tk.Button(self.command_frame, text = "Read backend command rate",
                 command = lambda: self.cmd_output_print(self.sys.get_counter(2)))
+        self.otp_ocp_disable = ToggleButton(self.command_frame, "OTP,OCP OFF", "OTP,OCP ON",
+                lambda s: self.cmd_output_print(self.sys.set_backend_otp_ocp(not s)))
 
         self.be_sgl_rate_rd.pack(**button_pack_args)
         self.be_tt_rate_rd.pack(**button_pack_args)
         self.be_cmd_rate_rd.pack(**button_pack_args)
+        self.otp_ocp_disable.pack(**button_pack_args)
 
         Separator(self.command_frame).pack(fill = tk.X, padx = 60, pady = 30)
 
@@ -362,14 +368,17 @@ class SystemUI():
                 command = lambda: self.cmd_output_print(self.sys.get_period()))
         self.sgl_rate_rd = tk.Button(self.command_frame, text = "Read frontend singles rate",
                 command = lambda: self.cmd_output_print(self.sys.get_all_singles_rates()))
-        self.det_disable = ToggleButton(self.command_frame, "Detector ON", "Detector OFF",
+        self.det_disable = ToggleButton(self.command_frame, "Detector OFF", "Detector ON",
                 lambda s: self.cmd_output_print(self.sys.detector_disable(s)))
+        self.otp_disable = ToggleButton(self.command_frame, "OTP OFF", "OTP ON",
+                lambda s: self.cmd_output_print(self.sys.set_frontend_otp(0 if s else 0x3DC)))
 
         self.bias_rd.pack(**button_pack_args)
         self.thresh_rd.pack(**button_pack_args)
         self.period_rd.pack(**button_pack_args)
         self.sgl_rate_rd.pack(**button_pack_args)
         self.det_disable.pack(**button_pack_args)
+        self.otp_disable.pack(**button_pack_args)
 
         self.cmd_output = tk.Text(self.command_frame, height = 10, takefocus = False)
         self.cmd_output.pack(**button_pack_args)
