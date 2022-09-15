@@ -4,13 +4,13 @@ import tkinter as tk
 from datetime import datetime, timedelta
 from tkinter.ttk import Separator, Notebook
 
+import command as cmd
 from frontend import BIAS_ON, BIAS_OFF
 from system import System
+from backend import monitor_log
 from sync_ui import SyncUI
 from backend_ui import BackendUI
 from toggle_button import ToggleButton
-
-from backend import monitor_log
 
 class PowerPopup(tk.Toplevel):
     def __init__(self, root, turn_on):
@@ -22,6 +22,16 @@ class PowerPopup(tk.Toplevel):
 
     def set(self, i):
         self.popup_status.config(text = f'Module: {i}')
+
+class WarningPopup(tk.Toplevel):
+    def __init__(self, root, message):
+        super().__init__(root)
+        self.title('Warning from system')
+        self.attributes('-type', 'dialog')
+        self.popup_status = tk.Label(self, text = message)
+        self.popup_status.pack(pady = 10, padx = 40)
+        self.okay = tk.Button(self, text = "Okay", command = lambda: self.destroy())
+        self.okay.pack(fill = tk.X, expand = True, pady = 10, padx = 80)
 
 class SystemUI():
 
@@ -203,6 +213,22 @@ class SystemUI():
         acq_stop_thread.start()
         acq_check_fun()
 
+    def info(self):
+        for be in self.sys.backend:
+            try:
+                ip, val = be.gx.info_queue.get_nowait()
+                cmd_type = cmd.command(val)
+                cmd_module = cmd.module(val)
+                if cmd_type == cmd.CMD_RESPONSE:
+                    message = f'{ip}: channel {cmd_module} over temperature ({hex(val)})'
+                elif cmd_type == cmd.GET_CURRENT:
+                    message = f'{ip}: channel {cmd_module} over current ({hex(val)})'
+                else:
+                    message = f'{ip}: reports {hex(val)}'
+                WarningPopup(self.root, message)
+            except queue.Empty: pass
+        self.root.after(100, self.info)
+
     # Instantiate the UI
 
     def __init__(self, system_instance):
@@ -348,8 +374,9 @@ class SystemUI():
         self.cmd_output = tk.Text(self.command_frame, height = 10, takefocus = False)
         self.cmd_output.pack(**button_pack_args)
 
-        self.get_status()
+        self.info()
         self.temp_monitor()
+        self.get_status()
 
 if __name__ == "__main__":
     logging.basicConfig(level = logging.INFO)

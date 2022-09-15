@@ -7,6 +7,7 @@ NetworkErrors = (TimeoutError, ConnectionRefusedError, OSError)
 
 sys_port = 0x5001
 cmd_port = 5556
+info_port = 5557
 
 def ignore_network_errors(default_return):
     def wrap(unsafe):
@@ -34,7 +35,7 @@ def flush(s):
             s.settimeout(timeout)
             return
 
-def connect(s, ip, port, timeout):
+def connect(s, ip, port, timeout = None):
     if isinstance(s, socket.socket):
         s.close()
     try:
@@ -42,10 +43,10 @@ def connect(s, ip, port, timeout):
         s.settimeout(timeout)
         s.connect((ip,port))
     except Exception as e:
-        logging.info(f'{ip}: Failed to connect to port {port}, {e}')
+        logging.debug(f'{ip}: Failed to connect to port {port}, {e}')
     return s
 
-def handle_single(s, cmd_int):
+def handle(s, cmd_int):
     cmd_bytes = cmd_int.to_bytes(4,'big')
     s.send(cmd_bytes)
     resp_bytes = s.recv(4)
@@ -64,19 +65,6 @@ def handle_single(s, cmd_int):
         resp_int = int.from_bytes(resp_bytes, 'big')
         return resp_int
 
-def handle(s, cmd_int):
-    for _ in range(5):
-        flush(s)
-        try:
-            return s, handle_single(s, cmd_int)
-        except TimeoutError:
-            pass
-        except Exception as e:
-            s = connect(s, ip, cmd_port, timeout)
-            return s, e
-
-    return s, TimeoutError(f'Timeout sending command {hex(cmd_int)}')
-
 def run(ip, queue_in, queue_out):
     timeout = 0.1
     s = connect(None, ip, cmd_port, timeout)
@@ -86,7 +74,18 @@ def run(ip, queue_in, queue_out):
         if cmd_int is None:
             break
 
-        s, response = handle(s, cmd_int)
+        for _ in range(5):
+            try:
+                flush(s)
+                response = handle(s, cmd_int)
+            except TimeoutError as e:
+                response = e
+                continue
+            except Exception as e:
+                response = e
+                s = connect(s, ip, cmd_port, timeout)
+            break
+
         queue_out.put(response)
 
     s.close()
@@ -98,14 +97,28 @@ class Gigex():
         self.queue_in = queue.Queue()
         self.queue_out = queue.Queue()
 
+        self.info_stop = threading.Event()
+        self.info_lock = threading.Lock()
+        self.info_queue = queue.Queue()
+
     def start(self):
         self.thr = threading.Thread(target = run,
-                daemon = True, args = [self.ip, self.queue_in, self.queue_out])
+                args = [self.ip, self.queue_in, self.queue_out])
         self.thr.start()
+
+        self.info_thr = threading.Thread(target = self.info)
+        self.info_thr.start()
 
     def stop(self):
         self.queue_in.put(None)
         self.thr.join()
+
+        self.info_stop.set()
+        with self.info_lock:
+            try:
+                self.info_sock.shutdown(socket.SHUT_RD)
+            except: pass
+        self.info_thr.join()
 
     def send(self, val):
         with self.lock:
@@ -116,6 +129,20 @@ class Gigex():
             raise response
 
         return response
+
+    def info(self):
+        with self.info_lock:
+            self.info_sock = connect(None, self.ip, info_port)
+
+        while not self.info_stop.wait(1):
+            try:
+                val = self.info_sock.recv(4)
+                if len(val) == 0: break
+                self.info_queue.put((self.ip, val))
+            except Exception as e:
+                with self.info_lock:
+                   self.info_sock = connect(self.info_sock,
+                                            self.ip, info_port)
 
     @ignore_network_errors((False,[]))
     def spi(self, *data):
