@@ -343,7 +343,7 @@ class SystemUI():
         """ Backend command buttons """
 
         self.be_sgl_rate_rd = tk.Button(self.command_frame, text = "Read backend singles rate",
-                command = lambda: self.cmd_output_print(self.sys.get_counter(0)))
+                command = lambda: self.cmd_output_print(self.sys.get_counter(0, div = 8)))
         self.be_tt_rate_rd  = tk.Button(self.command_frame, text = "Read backend time tag rate",
                 command = lambda: self.cmd_output_print(self.sys.get_counter(1)))
         self.be_cmd_rate_rd = tk.Button(self.command_frame, text = "Read backend command rate",

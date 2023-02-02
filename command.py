@@ -117,15 +117,19 @@ def get_current(m):
 def backend_status(val = 0):
     return build(0, NOP, val)
 
-def backend_counter(module, channel):
+def backend_counter(module, channel, divisor = 0):
     """ read a counter for the specified module
     The channel value corresponds to:
     0 -> single events
     1 -> timetags
     2 -> commands from frontend
     The corresponding counter is reset upon reading
+
+    The divisor specifies the number of bits to right shift
+    before the value is returned from the system
     """
-    return build(module, COUNTER_READ, channel)
+    pld = ((divisor & 0xF) << 2) | (channel & 0x3)
+    return build(module, COUNTER_READ, pld)
 
 def backend_reg_update(otp = True, ocp = True, thr = 1500):
     return build(0, UPDATE_REG,

@@ -118,7 +118,7 @@ class Backend():
             if self.get_status():
                 temps = self.get_all_temps()
                 currs = self.get_current()
-                sgls  = self.get_counter(0)
+                sgls  = self.get_counter(0, div = 8)
                 self.ui_mon_queue.put((temps, currs, sgls))
 
                 now = datetime.now()
@@ -150,9 +150,9 @@ class Backend():
         return [cmd.payload(m) for m in resp]
 
     @ignore_network_errors([-1]*4)
-    def get_counter(self, ch):
-        resp = [self.gx.send(cmd.backend_counter(m,ch)) for m in range(4)]
-        return [cmd.payload(r) for r in resp]
+    def get_counter(self, ch, div = 0):
+        resp = [self.gx.send(cmd.backend_counter(m,ch,div)) for m in range(4)]
+        return [cmd.payload(r) << div for r in resp]
 
     @ignore_network_errors(None)
     def set_backend_otp_ocp(self, value = True):
