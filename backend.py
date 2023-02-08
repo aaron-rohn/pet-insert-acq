@@ -118,7 +118,7 @@ class Backend():
             if self.get_status():
                 temps = self.get_all_temps()
                 currs = self.get_current()
-                sgls  = self.get_counter(0, div = 8)
+                sgls  = self.get_counter(0, div = 3)
                 self.ui_mon_queue.put((temps, currs, sgls))
 
                 now = datetime.now()
