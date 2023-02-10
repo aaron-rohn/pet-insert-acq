@@ -1,0 +1,3 @@
+labjack-ljm
+simple-pid
+numpy

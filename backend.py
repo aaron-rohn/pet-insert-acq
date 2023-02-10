@@ -8,7 +8,7 @@ from logging.handlers import WatchedFileHandler
 data_port = 5555
 
 monitor_log = logging.getLogger("monitor")
-fhandle = WatchedFileHandler("/opt/acq/monitor.log")
+fhandle = WatchedFileHandler("/mnt/acq/monitor.log")
 monitor_log.addHandler(fhandle)
 monitor_log.setLevel(logging.INFO)
 monitor_log.propagate = False

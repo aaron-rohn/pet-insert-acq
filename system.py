@@ -7,7 +7,7 @@ class System():
     def __init__(self):
         self.sync = Sync('192.168.1.100')
         backend_ips = ['192.168.1.101', '192.168.1.102', '192.168.1.103', '192.168.1.104']
-        self.data_dir = '/opt/acq'
+        self.data_dir = '/mnt/acq'
         self.backend = [Backend(a) for a in backend_ips]
 
     def __getattr__(self, attr):
