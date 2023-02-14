@@ -157,6 +157,8 @@ class SystemUI():
         self.stop_updates = threading.Event()
         finished = threading.Event()
 
+        sort_coincidences = self.sort_coincidences_var.get()
+
         def acq_update_fun():
             # This function will run until the stop button is pressed
             if not self.stop_updates.is_set():
@@ -180,7 +182,7 @@ class SystemUI():
 
         acq_start_thread = threading.Thread(
                 target = self.sys.acq_start,
-                args = [finished])
+                args = [finished, sort_coincidences])
 
         acq_start_thread.start()
         acq_check_fun()
@@ -277,6 +279,10 @@ class SystemUI():
         self.statusbar_acq_handler(False)
 
         # Acquisition page
+        self.sort_coincidences_var = tk.BooleanVar(self.acq_frame, False)
+        self.sort_coincidences_cb = tk.Checkbutton(
+                self.acq_frame, text = 'Online coincidence sorting',
+                variable = self.sort_coincidences_var)
 
         self.acq_start_button = tk.Button(self.acq_frame, text = "Start acquisition",
                 command = self.start_acq, state = tk.NORMAL)
@@ -288,6 +294,7 @@ class SystemUI():
 
         button_pack_args = {'fill': tk.X, 'side': tk.TOP, 'padx': 10, 'pady': 5}
 
+        self.sort_coincidences_cb.pack(**button_pack_args)
         self.acq_start_button.pack(**button_pack_args)
         self.acq_stop_button.pack(**button_pack_args)
         self.acq_duration_label.pack(**button_pack_args)

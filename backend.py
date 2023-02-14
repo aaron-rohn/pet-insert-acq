@@ -57,7 +57,14 @@ def acquire(ip, stop, sink, running = None):
             for d in acq_inst:
                 f.write(d)
 
-    else:
+    elif isinstance(sink, socket.socket):
+        logging.debug('Start online coincidence sorting')
+        for d in acq_inst:
+            sink.send(d)
+        logging.debug('End online coincidence sorting')
+        sink.close()
+
+    else: # sink should be queue
         logging.debug(f'Create new ACQ worker thread to UI')
         for d in acq_inst:
             try:

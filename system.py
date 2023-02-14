@@ -1,4 +1,4 @@
-import os, shutil, logging, time, threading, glob
+import os, shutil, logging, time, threading, glob, socket, subprocess, sys
 from contextlib import ExitStack
 from sync import Sync
 from backend import Backend
@@ -32,18 +32,36 @@ class System():
         enum     = self.get_physical_idx()
         data_queue.put((sync, backend, power, enum))
 
-    def acq_start(self, finished):
+    def acq_start(self, finished, coincidences = False):
+        self.sorter = None
+        if coincidences:
+            logging.debug('Start online coincidence processor')
+            self.sorter = subprocess.Popen(['/usr/local/bin/sorter', '/mnt/acq/online.COIN'],
+                                           stdout = sys.stdout, stderr = sys.stderr)
+
         self.detector_disable(True)
         time.sleep(1)
 
         running = []
-        for be in self.backend:
-            fname = os.path.join(self.data_dir, be.ip + '.SGL')
+        for idx, be in enumerate(self.backend):
+            if coincidences:
+                try:
+                    sink = socket.socket(socket.AF_INET, socket.SOCK_STREAM);
+                    sink.connect(('127.0.0.1', 10000 + idx))
+                    logging.debug(f'Connected to online coincidence processor on port {10000 + idx}')
+                except:
+                    # online coincidence sorting isn't running
+                    logging.exception('Failed to connect to online coincidence processor')
+                    sink = be.ui_data_queue
+            else:
+                sink = os.path.join(self.data_dir, be.ip + '.SGL')
+
             r = threading.Event()
-            be.dest.put((fname, r))
+            be.dest.put((sink, r))
             running.append(r)
 
         [r.wait() for r in running]
+        time.sleep(1)
         self.sync.sync_reset()
         self.detector_disable(False)
         finished.set()
@@ -54,17 +72,28 @@ class System():
         for be in self.backend:
             be.dest.put((be.ui_data_queue,))
 
-        if data_dir:
-            sgl_files = glob.glob('*.SGL', root_dir = self.data_dir)
-            sgl_files = [os.path.join(self.data_dir, f) for f in sgl_files]
+        # Coincidence sorter process should exit when sockets close, if it was running
+        if self.sorter is not None:
+            try:
+                self.sorter.wait(10.0)
+            except subprocess.TimeoutExpired:
+                logging.exception('Online coincidence sorter did not stop cleanly, killing')
+                self.sorter.kill()
+            self.sorter = None
 
             try:
-                for f in sgl_files:
-                    shutil.move(f, data_dir)
-            except PermissionError as e:
-                logging.warning('Failed to move acquition files', exc_info = e)
-            except Exception as e:
-                logging.warning('Unknown error moving files', exc_info = e)
+                shutil.move('/mnt/acq/online.COIN', os.path.join(data_dir, 'online.COIN'))
+            except:
+                logging.exception('Error moving online coincidence sorted file')
+
+        # Move the singles files to the selected directory
+        elif data_dir:
+            sgl_files = glob.glob('*.SGL', root_dir = self.data_dir)
+            sgl_files = [os.path.join(self.data_dir, f) for f in sgl_files]
+            try:
+                for f in sgl_files: shutil.move(f, data_dir)
+            except:
+                logging.exception('Failed to move acquition files')
 
         finished.set()
 
