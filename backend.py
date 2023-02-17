@@ -51,6 +51,8 @@ def acquire(ip, stop, sink, running = None):
     acq_inst = BackendAcq(ip, stop)
     running.set()
 
+    monitor_log.info(f'{ip} {datetime.now()} acquisition: start')
+
     if isinstance(sink, str):
         logging.debug(f'Create new ACQ worker thread to {sink}')
         with open(sink, 'wb') as f:
@@ -60,7 +62,7 @@ def acquire(ip, stop, sink, running = None):
     elif isinstance(sink, socket.socket):
         logging.debug('Start online coincidence sorting')
         for d in acq_inst:
-            sink.send(d)
+            sink.sendall(d)
         logging.debug('End online coincidence sorting')
         sink.close()
 
@@ -70,6 +72,8 @@ def acquire(ip, stop, sink, running = None):
             try:
                 sink.put_nowait(d)
             except queue.Full: pass
+
+    monitor_log.info(f'{ip} {datetime.now()} acquisition: stop')
 
 class Backend():
     def __getattr__(self, attr):
