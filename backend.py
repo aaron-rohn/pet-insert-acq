@@ -48,6 +48,9 @@ def acquire(ip, stop, sink, running = None):
     if running is None:
         running = threading.Event()
 
+    if sink is None:
+        return
+
     acq_inst = BackendAcq(ip, stop)
     running.set()
 

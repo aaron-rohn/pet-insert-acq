@@ -153,6 +153,7 @@ class SystemUI():
 
     def start_acq(self):
         self.acq_start_button.config(state = tk.DISABLED)
+        self.enable_acq_cb.config(state = tk.DISABLED)
         self.acq_start_time = None
         self.stop_updates = threading.Event()
         finished = threading.Event()
@@ -191,6 +192,7 @@ class SystemUI():
         self.stop_updates.set()
         finished = threading.Event()
         self.acq_stop_button.config(state = tk.DISABLED)
+        self.enable_acq_cb.config(state = tk.NORMAL)
         data_dir = tk.filedialog.askdirectory(
                 title = "Directory to store data",
                 initialdir = "/")
@@ -209,6 +211,16 @@ class SystemUI():
 
         acq_stop_thread.start()
         acq_check_fun()
+
+    def disable_acq(self):
+        enable = self.enable_acq_var.get()
+        logging.warn('Enable acquisition' if enable else 'Disable acquisition')
+        newstate = tk.NORMAL if enable else tk.DISABLED
+        self.acq_stop_button.config(state = newstate)
+        self.acq_start_button.config(state = newstate)
+        for be in self.sys.backend:
+            target = be.ui_data_queue if enable else None
+            be.dest.put((target,))
 
     # polled functions
 
@@ -279,10 +291,17 @@ class SystemUI():
         self.statusbar_acq_handler(False)
 
         # Acquisition page
+
         self.sort_coincidences_var = tk.BooleanVar(self.acq_frame, False)
         self.sort_coincidences_cb = tk.Checkbutton(
                 self.acq_frame, text = 'Online coincidence sorting',
                 variable = self.sort_coincidences_var)
+
+        self.enable_acq_var = tk.BooleanVar(self.acq_frame, True)
+        self.enable_acq_cb = tk.Checkbutton(
+                self.acq_frame, text = 'Enable acquisition',
+                variable = self.enable_acq_var,
+                command = self.disable_acq)
 
         self.acq_start_button = tk.Button(self.acq_frame, text = "Start acquisition",
                 command = self.start_acq, state = tk.NORMAL)

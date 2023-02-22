@@ -3,6 +3,10 @@ from contextlib import ExitStack
 from sync import Sync
 from backend import Backend
 
+sorter_bin = '/usr/local/bin/sorter'
+online_coincidence_file = '/mnt/acq/online.COIN'
+sorter_base_port = 10000
+
 class System():
     def __init__(self):
         self.sync = Sync('192.168.1.100')
@@ -36,7 +40,7 @@ class System():
         self.sorter = None
         if coincidences:
             logging.debug('Start online coincidence processor')
-            self.sorter = subprocess.Popen(['/usr/local/bin/sorter', '/mnt/acq/online.COIN'],
+            self.sorter = subprocess.Popen([sorter_bin, online_coincidence_file],
                                            stdout = sys.stdout, stderr = sys.stderr)
 
         self.detector_disable(True)
@@ -47,7 +51,7 @@ class System():
             if coincidences:
                 try:
                     sink = socket.socket(socket.AF_INET, socket.SOCK_STREAM);
-                    sink.connect(('127.0.0.1', 10000 + idx))
+                    sink.connect(('127.0.0.1', sorter_base_port + idx))
                     logging.debug(f'Connected to online coincidence processor on port {10000 + idx}')
                 except:
                     # online coincidence sorting isn't running
@@ -82,7 +86,8 @@ class System():
             self.sorter = None
 
             try:
-                shutil.move('/mnt/acq/online.COIN', os.path.join(data_dir, 'online.COIN'))
+                shutil.move(online_coincidence_file,
+                            os.path.join(data_dir, 'online.COIN'))
             except:
                 logging.exception('Error moving online coincidence sorted file')
 
