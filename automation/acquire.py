@@ -53,16 +53,16 @@ class Sorter:
             self.inst.kill()
 
 if __name__ == "__main__":
-    stage = velmex.VelmexStage()
 
     nrings = 80
     step_duration = 600
     step_size = 1.0 # mm between rings
     distance_to_first_ring = 62.2 + 0.5 # mm from front face of system to center of first crystal ring
+
+    stage = velmex.VelmexStage()
     stage.move(distance_to_first_ring)
 
     files = [f'/mnt/acq/{ip}.SGL' for ip in backend_ips]
-    #sort = Sorter('/mnt/acq/hello.COIN')
     acq = Acquisition(files)
     acq.wait()
 
@@ -71,4 +71,3 @@ if __name__ == "__main__":
         stage.incr(step_size)
 
     acq.stop()
-    #sort.stop()

@@ -215,9 +215,11 @@ class SystemUI():
     def disable_acq(self):
         enable = self.enable_acq_var.get()
         logging.warn('Enable acquisition' if enable else 'Disable acquisition')
+
         newstate = tk.NORMAL if enable else tk.DISABLED
         self.acq_stop_button.config(state = newstate)
         self.acq_start_button.config(state = newstate)
+
         for be in self.sys.backend:
             target = be.ui_data_queue if enable else None
             be.dest.put((target,))

@@ -7,6 +7,17 @@ sorter_bin = '/usr/local/bin/sorter'
 online_coincidence_file = '/mnt/acq/online.COIN'
 sorter_base_port = 10000
 
+def create_socket(idx):
+    try:
+        sink = socket.socket(socket.AF_INET, socket.SOCK_STREAM);
+        sink.connect(('127.0.0.1', sorter_base_port + idx))
+        logging.debug(f'Connected to online coincidence processor on port {10000 + idx}')
+        return sink
+    except:
+        # online coincidence sorting isn't running
+        logging.exception('Failed to connect to online coincidence processor')
+        return None
+
 class System():
     def __init__(self):
         self.sync = Sync('192.168.1.100')
@@ -45,18 +56,10 @@ class System():
 
         self.detector_disable(True)
         time.sleep(1)
-
         running = []
         for idx, be in enumerate(self.backend):
             if coincidences:
-                try:
-                    sink = socket.socket(socket.AF_INET, socket.SOCK_STREAM);
-                    sink.connect(('127.0.0.1', sorter_base_port + idx))
-                    logging.debug(f'Connected to online coincidence processor on port {10000 + idx}')
-                except:
-                    # online coincidence sorting isn't running
-                    logging.exception('Failed to connect to online coincidence processor')
-                    sink = be.ui_data_queue
+                sink = create_socket(idx) or be.ui_data_queue
             else:
                 sink = os.path.join(self.data_dir, be.ip + '.SGL')
 
@@ -76,29 +79,22 @@ class System():
         for be in self.backend:
             be.dest.put((be.ui_data_queue,))
 
-        # Coincidence sorter process should exit when sockets close, if it was running
         if self.sorter is not None:
+            files = [online_coincidence_file]
             try:
                 self.sorter.wait(10.0)
             except subprocess.TimeoutExpired:
                 logging.exception('Online coincidence sorter did not stop cleanly, killing')
                 self.sorter.kill()
-            self.sorter = None
+        else:
+            files = glob.glob('*.SGL', root_dir = self.data_dir)
+            files = [os.path.join(self.data_dir, f) for f in sgl_files]
 
+        if data_dir:
             try:
-                shutil.move(online_coincidence_file,
-                            os.path.join(data_dir, 'online.COIN'))
-            except:
-                logging.exception('Error moving online coincidence sorted file')
-
-        # Move the singles files to the selected directory
-        elif data_dir:
-            sgl_files = glob.glob('*.SGL', root_dir = self.data_dir)
-            sgl_files = [os.path.join(self.data_dir, f) for f in sgl_files]
-            try:
-                for f in sgl_files: shutil.move(f, data_dir)
+                for f in files: shutil.move(f, data_dir)
             except:
                 logging.exception('Failed to move acquition files')
 
+        self.sorter = None
         finished.set()
-
