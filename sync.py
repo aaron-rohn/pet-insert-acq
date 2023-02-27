@@ -1,9 +1,8 @@
-import command, threading, queue, logging
-from gigex import Gigex, ignore_network_errors
+import command, threading, queue, logging, socket
+from gigex import Gigex, ignore_network_errors, cmd_port
 import numpy as np
 from labjack import ljm
 from simple_pid import PID
-
 
 def set_air_ljm(value):
     fullscale = 5.0
@@ -29,8 +28,13 @@ class Sync():
     def __enter__(self):
         self.gx.start()
         self.set_network_led(clear = False)
+        self.listener = socket.create_server(('127.0.0.1', cmd_port))
+        self.listener_thread = threading.Thread(target = self.remote_listener)
 
     def __exit__(self, *context):
+        self.listener.close()
+        self.listener.shutdown()
+        self.listener_thread.join()
         self.set_network_led(clear = True)
         self.gx.stop()
 
@@ -101,3 +105,17 @@ class Sync():
             set_air_ljm(u)
 
         set_air_ljm(0.0)
+
+    def remote_listener(self):
+        while True:
+            try:
+                c, addr = self.listener.accept()
+            except:
+                logging.exception('Exit from remote listener thread')
+                return
+
+            cmd = c.recv(1024)
+            cmd = int.from_bytes(cmd, 'big')
+            ret = self.gx.send(cmd)
+            c.sendall(ret.to_bytes(4, 'big'))
+            c.close()

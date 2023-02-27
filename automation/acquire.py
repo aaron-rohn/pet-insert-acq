@@ -1,7 +1,24 @@
 import system, backend, velmex
-import sys, socket, threading, subprocess, time
+import sys, socket, threading, subprocess, time, logging
+from gigex import cmd_port
+import command
 
 backend_ips = ['192.168.1.101', '192.168.1.102', '192.168.1.103', '192.168.1.104']
+
+def sync_reset():
+    c = socket.create_connection(('127.0.0.1', cmd_port))
+    cmd = command.CMD_EMPTY
+    c.send(cmd.to_bytes(4, 'big'))
+    resp = c.recv(4)
+    c.close()
+
+    resp = int.from_bytes('big')
+    if resp != (command.CMD_EMPTY | 0x1):
+        logging.error(f'Got response {hex(resp)} when performing reset')
+    else:
+        logging.info('Time tags reset')
+
+    return resp
 
 class Acquisition:
     def __init__(self, sinks):
@@ -54,6 +71,8 @@ class Sorter:
 
 if __name__ == "__main__":
 
+    logging.basicConfig(level = logging.INFO)
+
     nrings = 80
     step_duration = 600
     step_size = 1.0 # mm between rings
@@ -65,6 +84,7 @@ if __name__ == "__main__":
     files = [f'/mnt/acq/{ip}.SGL' for ip in backend_ips]
     acq = Acquisition(files)
     acq.wait()
+    sync_reset()
 
     for i in range(nrings):
         time.sleep(step_duration)
