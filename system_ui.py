@@ -1,12 +1,10 @@
 import logging, threading, queue
-import tkinter.filedialog
 import tkinter as tk
-from datetime import datetime, timedelta
+from datetime import datetime
 from tkinter.ttk import Separator, Notebook
 
 import command as cmd
 from frontend import BIAS_ON, BIAS_OFF, adc_to_temp
-from system import System
 from backend import monitor_log
 from sync_ui import SyncUI
 from backend_ui import BackendUI
@@ -251,8 +249,9 @@ class SystemUI():
     # Instantiate the UI
 
     def __init__(self, system_instance):
-        self.root = tk.Tk()
-        self.root.bind('<Escape>', self.quit)
+        self.root = tk.Tk(className = 'PET data acquisition')
+        self.root.title('PET data acquisition')
+        #self.root.bind('<Escape>', self.quit)
         self.sys = system_instance
 
         # Top level notebook container
@@ -415,11 +414,3 @@ class SystemUI():
         self.info()
         self.temp_monitor()
         self.get_status()
-
-if __name__ == "__main__":
-    logging.basicConfig(level = logging.INFO)
-    sys = System()
-    app = SystemUI(sys)
-    with sys:
-        app.root.mainloop()
-
