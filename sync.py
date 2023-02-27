@@ -30,10 +30,11 @@ class Sync():
         self.set_network_led(clear = False)
         self.listener = socket.create_server(('127.0.0.1', cmd_port))
         self.listener_thread = threading.Thread(target = self.remote_listener)
+        self.listener_thread.start()
 
     def __exit__(self, *context):
+        self.listener.shutdown(socket.SHUT_RDWR)
         self.listener.close()
-        self.listener.shutdown()
         self.listener_thread.join()
         self.set_network_led(clear = True)
         self.gx.stop()
@@ -110,8 +111,7 @@ class Sync():
         while True:
             try:
                 c, addr = self.listener.accept()
-            except:
-                logging.exception('Exit from remote listener thread')
+            except OSError: # socket was shutdown
                 return
 
             cmd = c.recv(1024)

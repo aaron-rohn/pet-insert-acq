@@ -212,9 +212,9 @@ class SystemUI():
         acq_stop_thread.start()
         acq_check_fun()
 
-    def disable_acq(self):
+    def enable_acq(self):
         enable = self.enable_acq_var.get()
-        logging.warn('Enable acquisition' if enable else 'Disable acquisition')
+        logging.warning('Enable acquisition' if enable else 'Disable acquisition')
 
         newstate = tk.NORMAL if enable else tk.DISABLED
         self.acq_stop_button.config(state = newstate)
@@ -303,7 +303,7 @@ class SystemUI():
         self.enable_acq_cb = tk.Checkbutton(
                 self.acq_frame, text = 'Enable acquisition',
                 variable = self.enable_acq_var,
-                command = self.disable_acq)
+                command = self.enable_acq)
 
         self.acq_start_button = tk.Button(self.acq_frame, text = "Start acquisition",
                 command = self.start_acq, state = tk.NORMAL)
@@ -315,6 +315,7 @@ class SystemUI():
 
         button_pack_args = {'fill': tk.X, 'side': tk.TOP, 'padx': 10, 'pady': 5}
 
+        self.enable_acq_cb.pack(**button_pack_args)
         self.sort_coincidences_cb.pack(**button_pack_args)
         self.acq_start_button.pack(**button_pack_args)
         self.acq_stop_button.pack(**button_pack_args)
@@ -349,7 +350,7 @@ class SystemUI():
         self.refresh = tk.Button(self.status_frame, text = "Refresh", command = self.get_status)
         self.pwr_tog = ToggleButton(self.status_frame, "Power ON", "Power OFF", self.toggle_power)
         self.bias_tog = ToggleButton(self.status_frame, "Bias ON", "Bias OFF", self.toggle_bias)
-        self.reboot_gigex_button = tk.Button(self.status_frame, text = "Reboot Gigex", command = self.reboot_gigex)
+        #self.reboot_gigex_button = tk.Button(self.status_frame, text = "Reboot Gigex", command = self.reboot_gigex)
 
         self.power_rd = tk.Button(self.status_frame, text = "Read power state",
                 command = self.get_power)
@@ -361,7 +362,7 @@ class SystemUI():
         self.refresh.pack(**main_pack_args)
         self.pwr_tog.pack(**main_pack_args)
         self.bias_tog.pack(**main_pack_args)
-        self.reboot_gigex_button.pack(**main_pack_args)
+        #self.reboot_gigex_button.pack(**main_pack_args)
         Separator(self.status_frame).pack(fill = tk.X, padx = 60, pady = 30)
         self.power_rd.pack(**main_pack_args)
         self.power_wr.pack(**main_pack_args)

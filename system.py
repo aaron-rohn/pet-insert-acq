@@ -7,17 +7,6 @@ sorter_bin = '/usr/local/bin/sorter'
 online_coincidence_file = '/mnt/acq/online.COIN'
 sorter_base_port = 10000
 
-def create_socket(idx):
-    try:
-        sink = socket.socket(socket.AF_INET, socket.SOCK_STREAM);
-        sink.connect(('127.0.0.1', sorter_base_port + idx))
-        logging.debug(f'Connected to online coincidence processor on port {10000 + idx}')
-        return sink
-    except:
-        # online coincidence sorting isn't running
-        logging.exception('Failed to connect to online coincidence processor')
-        return None
-
 class System():
     def __init__(self):
         self.sync = Sync('192.168.1.100')
@@ -59,7 +48,11 @@ class System():
         running = []
         for idx, be in enumerate(self.backend):
             if coincidences:
-                sink = create_socket(idx) or be.ui_data_queue
+                try:
+                    sink = socket.create_connection(('127.0.0.1', sorter_base_port + idx))
+                except:
+                    sink = be.ui_data_queue
+                    logging.exception('Failed to connect to online coincidence processor')
             else:
                 sink = os.path.join(self.data_dir, be.ip + '.SGL')
 
