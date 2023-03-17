@@ -44,3 +44,9 @@ class VelmexStage:
         self.query('C, E S1M2000, R') # set speed to 5mm / sec
         self.home()
         self.zero()
+
+if __name__ == "__main__":
+    distance_to_middle = 101.95 - 0.5
+    distance_to_first_ring = distance_to_middle - 39.75 + 0.5
+    stage = VelmexStage('/dev/ttyUSB5')
+    stage.move(distance_to_first_ring)

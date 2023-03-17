@@ -1,5 +1,6 @@
 import logging, threading, queue
 import tkinter as tk
+import tkinter.filedialog
 from datetime import datetime
 from tkinter.ttk import Separator, Notebook
 
@@ -31,7 +32,7 @@ class WarningPopup(tk.Toplevel):
         self.okay = tk.Button(self, text = "Okay", command = lambda: self.destroy())
         self.okay.pack(fill = tk.X, expand = True, pady = 10, padx = 80)
 
-class SystemUI():
+class SystemUI(tk.Tk):
 
     # UI only methods
 
@@ -64,10 +65,6 @@ class SystemUI():
     def get_pwr_vars(self):
         return [[var.get() for var in b.m_pow_var] for b in self.backend]
 
-    def quit(self, event):
-        if tk.messagebox.askyesno(message = "Exit application?"):
-            self.root.destroy()
-
     # Methods that interact with the system
 
     def get_status(self):
@@ -79,7 +76,7 @@ class SystemUI():
 
         def status_check():
             if data_queue.empty():
-                self.root.after(100, status_check)
+                self.after(100, status_check)
             else:
                 sync_status, be_status, sys_pwr, sys_enum = data_queue.get()
 
@@ -124,13 +121,9 @@ class SystemUI():
         self.sys.set_bias(val)
         self.statusbar_bias_handler(turn_on)
 
-    def reboot_gigex(self):
-        ret = [b.gx.reboot() for b in self.sys.backend]
-        logging.debug(f'Reboot gigex returned {ret}')
-
     def toggle_power(self, turn_on = False):
         nmodules = 4
-        popup = PowerPopup(self.root, turn_on)
+        popup = PowerPopup(self, turn_on)
         self.pwr_tog.config(state = tk.DISABLED)
         starting_pwr = self.sys.get_power()
 
@@ -163,7 +156,7 @@ class SystemUI():
             if not self.stop_updates.is_set():
                 tdiff = datetime.now() - self.acq_start_time
                 self.acq_duration_label.config(text = f'Elapsed: {tdiff}')
-                self.root.after(100, acq_update_fun)
+                self.after(100, acq_update_fun)
 
         def acq_check_fun():
             #This function will run until the acqsuision has sucessfully started
@@ -177,7 +170,7 @@ class SystemUI():
                 acq_update_fun()
 
             else:
-                self.root.after(100, acq_check_fun)
+                self.after(100, acq_check_fun)
 
         acq_start_thread = threading.Thread(
                 target = self.sys.acq_start,
@@ -201,7 +194,7 @@ class SystemUI():
                 self.statusbar_acq_handler(False)
                 monitor_log.info(f'end acq at {datetime.now()}')
             else:
-                self.root.after(100, acq_check_fun)
+                self.after(100, acq_check_fun)
 
         acq_stop_thread = threading.Thread(
                 target = self.sys.acq_stop,
@@ -225,7 +218,7 @@ class SystemUI():
     # polled functions
 
     def temp_monitor(self):
-        self.root.after(10000, self.temp_monitor)
+        self.after(10000, self.temp_monitor)
         vals = [b.temps for b in self.backend]
         self.sync.sync.temp_queue.put(vals)
 
@@ -242,35 +235,37 @@ class SystemUI():
                     message = f'{ip}: Module {cmd_module} over current, {cmd_pld} mA ({hex(val)})'
                 else:
                     message = f'{ip}: reports {hex(val)}'
-                WarningPopup(self.root, message)
+                WarningPopup(self, message)
             except queue.Empty: pass
-        self.root.after(100, self.info)
+        self.after(100, self.info)
 
     # Instantiate the UI
 
-    def __init__(self, system_instance):
-        self.root = tk.Tk(className = 'PET data acquisition')
-        self.root.title('PET data acquisition')
-        #self.root.bind('<Escape>', self.quit)
+    def __init__(self, system_instance, *args, **kwds):
+        #self.root = tk.Tk(className = 'Acquisition')
+        #self.root.title('PET data acquisition')
+
+        super().__init__(*args, **kwds)
+        self.title('PET data acquisition')
         self.sys = system_instance
 
         # Top level notebook container
 
-        self.pages = Notebook(self.root)
+        pages = Notebook(self)
 
-        self.status_frame = tk.Frame(self.pages)
-        self.command_frame = tk.Frame(self.pages)
-        self.acq_frame = tk.Frame(self.pages)
+        self.status_frame = tk.Frame(pages)
+        self.command_frame = tk.Frame(pages)
+        self.acq_frame = tk.Frame(pages)
 
-        self.pages.add(self.status_frame, text = "System status")
-        self.pages.add(self.command_frame, text = "Commands")
-        self.pages.add(self.acq_frame, text = "Acquisition")
+        pages.add(self.status_frame, text = "System status")
+        pages.add(self.command_frame, text = "Commands")
+        pages.add(self.acq_frame, text = "Acquisition")
 
-        self.pages.pack(fill = tk.BOTH, expand = True)
+        pages.pack(fill = tk.BOTH, expand = True)
 
         # Status bar
 
-        self.statusbar_frame = tk.Frame(self.root, relief = tk.SUNKEN)
+        self.statusbar_frame = tk.Frame(self, relief = tk.SUNKEN)
         self.statusbar_frame.pack(side = tk.BOTTOM, fill = tk.X)
 
         self.statusbar_label = tk.Label(self.statusbar_frame)
@@ -349,7 +344,6 @@ class SystemUI():
         self.refresh = tk.Button(self.status_frame, text = "Refresh", command = self.get_status)
         self.pwr_tog = ToggleButton(self.status_frame, "Power ON", "Power OFF", self.toggle_power)
         self.bias_tog = ToggleButton(self.status_frame, "Bias ON", "Bias OFF", self.toggle_bias)
-        #self.reboot_gigex_button = tk.Button(self.status_frame, text = "Reboot Gigex", command = self.reboot_gigex)
 
         self.power_rd = tk.Button(self.status_frame, text = "Read power state",
                 command = self.get_power)
@@ -361,7 +355,6 @@ class SystemUI():
         self.refresh.pack(**main_pack_args)
         self.pwr_tog.pack(**main_pack_args)
         self.bias_tog.pack(**main_pack_args)
-        #self.reboot_gigex_button.pack(**main_pack_args)
         Separator(self.status_frame).pack(fill = tk.X, padx = 60, pady = 30)
         self.power_rd.pack(**main_pack_args)
         self.power_wr.pack(**main_pack_args)

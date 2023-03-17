@@ -27,6 +27,7 @@ class Acquisition:
 
     def wait(self):
         [r.wait() for r in self.running]
+        time.sleep(1)
         print('Acquisition is running')
 
     def stop(self):
@@ -72,27 +73,47 @@ if __name__ == "__main__":
 
     logging.basicConfig(level = logging.INFO)
 
-    nrings = 80
-    step_duration = 600
+    nrings = 80 + 10
+    step_duration = 60
     step_size = 1.0 # mm between rings
-    distance_to_first_ring = 62.2 + 0.5 # mm from front face of system to center of first crystal ring
+    distance_to_middle = 101.95 - 0.5
+    distance_to_first_ring = distance_to_middle - 39.75 + 0.5
 
-    #stage = velmex.VelmexStage()
-    #stage.move(distance_to_first_ring)
-
-    #files = [f'/mnt/acq/{ip}.SGL' for ip in backend_ips]
-    sort = Sorter('/mnt/acq/hello.COIN')
-    acq = Acquisition(sort.socks)
+    files = [f'/mnt/acq/pos3_{ip}.SGL' for ip in backend_ips]
+    acq = Acquisition(files)
     acq.wait()
     acq.reset()
 
-    for i in range(5):
-        time.sleep(60)
-        print(i)
+    print('acq started')
 
-    #for i in range(nrings):
-    #    time.sleep(step_duration)
-    #    stage.incr(step_size)
+    time.sleep(300)
 
+    print('stopping...')
     acq.stop()
-    sort.stop()
+
+#    stage = velmex.VelmexStage('/dev/ttyUSB5')
+#    stage.move(distance_to_first_ring - 5)
+#
+#    print('clearing data...')
+#    acq = Acquisition(['/dev/null'] * 4)
+#    acq.wait()
+#    time.sleep(10)
+#    acq.stop()
+#    print('cleared')
+#
+#    for i in range(nrings):
+#        print(f'acq {i} starting...')
+#
+#        files = [f'/mnt/acq/{i}_{ip}.SGL' for ip in backend_ips]
+#        acq = Acquisition(files)
+#        acq.wait()
+#        acq.reset()
+#
+#        print('acq started')
+#
+#        time.sleep(step_duration)
+#        stage.incr(step_size)
+#
+#        print('stopping...')
+#        acq.stop()
+#        print('acq stopped')

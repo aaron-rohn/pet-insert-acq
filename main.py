@@ -7,6 +7,6 @@ from system_ui import SystemUI
 if __name__ == "__main__":
     logging.basicConfig(level = logging.INFO)
     sys = System()
-    app = SystemUI(sys)
+    ui = SystemUI(sys, className = 'Acquisition')
     with sys:
-        app.root.mainloop()
+        ui.mainloop()
