@@ -81,7 +81,7 @@ class System():
                 self.sorter.kill()
         else:
             files = glob.glob('*.SGL', root_dir = self.data_dir)
-            files = [os.path.join(self.data_dir, f) for f in sgl_files]
+            files = [os.path.join(self.data_dir, f) for f in files]
 
         if data_dir:
             try:
